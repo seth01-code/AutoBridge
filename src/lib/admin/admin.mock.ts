@@ -14,6 +14,7 @@ export const users: User[] = [
     lastLogin: "2026-05-25",
     totalSpent: 1200,
     ordersCount: 4,
+    risk: "low",
   },
   {
     id: "u2",
@@ -26,6 +27,7 @@ export const users: User[] = [
     lastLogin: "2026-05-20",
     totalSpent: 540,
     ordersCount: 2,
+    risk: "medium",
   },
   {
     id: "u3",
@@ -38,9 +40,9 @@ export const users: User[] = [
     lastLogin: "2026-05-26",
     totalSpent: 0,
     ordersCount: 0,
+    risk: "low",
   },
 ];
-
 /* ================= VENDORS ================= */
 
 export const vendors: Vendor[] = [

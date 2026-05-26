@@ -5,6 +5,9 @@ export type UserStatus = "active" | "suspended" | "banned";
 
 export type VendorStatus = "pending" | "approved" | "suspended";
 
+export type RiskLevel = "low" | "medium" | "high";
+
+
 export type OrderStatus =
   | "processing"
   | "in_transit"
@@ -26,6 +29,12 @@ export interface User {
 
   totalSpent: number;
   ordersCount: number;
+
+  // ✅ ADD THESE (ADMIN INTELLIGENCE LAYER)
+  risk: RiskLevel;
+  walletBalance: number;
+  flagged: boolean;
+  verificationLevel: "unverified" | "basic" | "kyc";
 }
 
 // ================= VENDOR =================
