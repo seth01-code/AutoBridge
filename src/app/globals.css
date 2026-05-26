@@ -1,26 +1,101 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0b1120;
+  --surface: #111827;
+  --card: #172033;
+
+  --primary: #ff6b35;
+  --secondary: #ff8a5b;
+
+  --text-primary: #f9fafb;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --border: rgba(255, 255, 255, 0.08);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
+  color: var(--text-primary);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* GLOBAL BORDER */
+* {
+  border-color: var(--border);
+}
+
+/* GLASS EFFECT */
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+}
+
+/* ORANGE GRADIENT TEXT */
+.gradient-text {
+  background: linear-gradient(
+    to right,
+    #ff6b35,
+    #ff8a5b
+  );
+
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* HERO GRID */
+.hero-grid {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px
+  );
+
+  background-size: 30px 30px;
+}
+
+/* CUSTOM UTILITIES */
+.bg-background {
+  background: var(--background);
+}
+
+.bg-surface {
+  background: var(--surface);
+}
+
+.bg-card {
+  background: var(--card);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.bg-primary {
+  background: var(--primary);
+}
+
+.shadow-glow {
+  box-shadow: 0 0 30px rgba(255, 107, 53, 0.15);
+}
+
+.surface {
+  @apply bg-white/5 border border-white/10 backdrop-blur-xl;
+}
+
+.card {
+  @apply bg-[#172033] border border-white/10 rounded-2xl;
+}
+
+.card-hover {
+  @apply transition hover:bg-white/10 hover:-translate-y-1 duration-300;
 }
