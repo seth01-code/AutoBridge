@@ -2,7 +2,7 @@ import { User, Vendor, Order } from "./admin.types";
 
 /* ================= USERS ================= */
 
-eexport const users: User[] = [
+export const users: User[] = [
   {
     id: "u1",
     name: "John Customer",
