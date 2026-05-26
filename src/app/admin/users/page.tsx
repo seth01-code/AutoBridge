@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { users as mockUsers } from "../mock/adminData";
+import { users as mockUsers } from "../../../lib/admin/admin.mock";
 import {
   Search,
   Ban,

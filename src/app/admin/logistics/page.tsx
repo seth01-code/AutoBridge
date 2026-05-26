@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { shipments as initialShipments } from "../mock/adminData";
+import { shipments as initialShipments } from "../../../lib/admin/admin.mock";
 import {
   Truck,
   Package,
