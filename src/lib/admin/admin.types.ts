@@ -28,11 +28,12 @@ export interface User {
   lastLogin: string;
 
   totalSpent: number;
-  ordersCount: number;
 
-  // ✅ ADD THESE (ADMIN INTELLIGENCE LAYER)
+  // ✅ MATCH YOUR UI
+  orders: number;        // instead of ordersCount
+  wallet: number;        // instead of walletBalance
+
   risk: RiskLevel;
-  walletBalance: number;
   flagged: boolean;
   verificationLevel: "unverified" | "basic" | "kyc";
 }

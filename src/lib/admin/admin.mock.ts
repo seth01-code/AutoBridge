@@ -2,7 +2,7 @@ import { User, Vendor, Order } from "./admin.types";
 
 /* ================= USERS ================= */
 
-export const users: User[] = [
+eexport const users: User[] = [
   {
     id: "u1",
     name: "John Customer",
@@ -13,8 +13,13 @@ export const users: User[] = [
     country: "Nigeria",
     lastLogin: "2026-05-25",
     totalSpent: 1200,
-    ordersCount: 4,
+
+    orders: 4,
+    wallet: 50000,
+
     risk: "low",
+    flagged: false,
+    verificationLevel: "kyc",
   },
   {
     id: "u2",
@@ -26,8 +31,13 @@ export const users: User[] = [
     country: "Kenya",
     lastLogin: "2026-05-20",
     totalSpent: 540,
-    ordersCount: 2,
+
+    orders: 2,
+    wallet: 12000,
+
     risk: "medium",
+    flagged: false,
+    verificationLevel: "basic",
   },
   {
     id: "u3",
@@ -39,8 +49,13 @@ export const users: User[] = [
     country: "Nigeria",
     lastLogin: "2026-05-26",
     totalSpent: 0,
-    ordersCount: 0,
+
+    orders: 0,
+    wallet: 0,
+
     risk: "low",
+    flagged: false,
+    verificationLevel: "kyc",
   },
 ];
 /* ================= VENDORS ================= */
