@@ -1,36 +1,16 @@
-// ================= CORE ROLES =================
+// ================= CORE =================
 export type Role = "customer" | "vendor" | "admin";
 
-// ================= USER STATUS =================
-export type UserStatus = "active" | "suspended" | "banned" | "pending";
+export type UserStatus = "active" | "suspended" | "banned";
 
-// ================= VENDOR STATUS =================
-export type VendorStatus = "pending" | "approved" | "rejected" | "suspended";
+export type VendorStatus = "pending" | "approved" | "suspended";
 
-// ================= ORDER STATUS =================
 export type OrderStatus =
   | "processing"
-  | "packed"
   | "in_transit"
   | "delivered"
-  | "refunded"
-  | "cancelled";
-
-// ================= SHIPMENT STATUS =================
-export type ShipmentStatus =
-  | "pending"
-  | "packed"
-  | "dispatched"
-  | "in_transit"
-  | "delivered"
-  | "delayed"
-  | "returned";
-
-// ================= CARRIER =================
-export type Carrier = "DHL" | "FedEx" | "UPS" | "Local Courier" | "Unassigned";
-
-// ================= PAYMENT STATUS =================
-export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
+  | "cancelled"
+  | "refunded";
 
 // ================= USER =================
 export interface User {
@@ -40,13 +20,12 @@ export interface User {
   role: Role;
   status: UserStatus;
 
-  walletBalance: number;
-  totalOrders: number;
-
-  riskScore: "low" | "medium" | "high";
-
-  lastLogin?: string;
+  country: string;
   createdAt: string;
+  lastLogin: string;
+
+  totalSpent: number;
+  ordersCount: number;
 }
 
 // ================= VENDOR =================
@@ -54,20 +33,25 @@ export interface Vendor {
   id: string;
   name: string;
   email: string;
+
   status: VendorStatus;
   country: string;
 
   revenue: number;
   products: number;
-  rating?: number;
 
-  walletBalance: number;
-  totalSales: number;
+  rating: number;
+  verified: boolean;
 
-  createdAt: string;
+  totalOrders: number;
+  payoutAccount: string;
 }
 
-// ================= ORDER =================
+// ================= ORDERS =================
+export type PaymentStatus = "pending" | "paid" | "failed";
+
+export type OrderChannel = "web" | "mobile";
+
 export interface Order {
   id: string;
   customer: string;
@@ -79,16 +63,35 @@ export interface Order {
   tracking: string;
 
   createdAt: string;
+
+  paymentStatus: PaymentStatus;
+  currency: "USD" | "NGN" | "EUR" | "GBP";
+
+  items: number;
+  channel: OrderChannel;
 }
 
-// ================= SHIPMENT =================
-export interface Shipment {
+// ================= PAYMENTS =================
+export interface Payment {
   id: string;
 
-  tracking: string;
-  orderId: string;
+  type: "vendor_payout" | "platform_fee" | "refund";
 
-  status: ShipmentStatus;
+  amount: number;
+  status: "pending" | "completed" | "failed";
+
+  method: "bank_transfer" | "stripe" | "wallet";
+
+  vendor: string;
+  createdAt: string;
+}
+
+// ================= SHIPMENTS =================
+export type Carrier = "DHL" | "FedEx" | "UPS" | "Local Courier";
+
+export interface Shipment {
+  tracking: string;
+  status: string;
 
   progress: number;
 
@@ -98,52 +101,50 @@ export interface Shipment {
   destination: string;
 
   eta: string;
-
-  createdAt: string;
-  updatedAt?: string;
 }
 
-// ================= PAYMENT =================
-export interface Payment {
+// ================= ANALYTICS =================
+export interface Analytics {
+  revenue: {
+    today: number;
+    week: number;
+    month: number;
+  };
+
+  users: {
+    total: number;
+    active: number;
+  };
+
+  vendors: {
+    total: number;
+    pending: number;
+    active: number;
+  };
+
+  orders: {
+    total: number;
+    processing: number;
+    delivered: number;
+  };
+
+  conversionRate: number;
+}
+
+// ================= SUPPORT =================
+export interface Ticket {
   id: string;
-
-  type: "vendor_payout" | "platform_fee" | "refund";
-
-  amount: number;
-  currency: "NGN" | "USD" | "EUR" | "GBP";
-
-  status: PaymentStatus;
-
-  vendorId?: string;
-  orderId?: string;
-
-  createdAt: string;
-}
-
-// ================= ANALYTICS SNAPSHOT =================
-export interface AnalyticsSnapshot {
-  date: string;
-
-  users: number;
-  vendors: number;
-  orders: number;
-
-  revenue: number;
-  profit: number;
-
-  activeShipments: number;
+  user: string;
+  subject: string;
+  status: "open" | "pending" | "closed";
+  priority: "low" | "medium" | "high";
 }
 
 // ================= AUDIT LOG =================
 export interface AuditLog {
   id: string;
-
   action: string;
-  performedBy: string;
-
-  targetType: "user" | "vendor" | "order" | "shipment";
-
-  targetId: string;
-
+  actor: string;
+  target: string;
   timestamp: string;
 }
