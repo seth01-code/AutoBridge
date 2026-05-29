@@ -201,9 +201,9 @@ export default function AppShell({ children }: Props) {
 
             {/* RIGHT */}
             <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs">
-                <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-                Live
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs">
+                <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" />
+                Demo
               </div>
 
               {/* PROFILE */}

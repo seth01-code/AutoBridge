@@ -8,7 +8,7 @@ import {
   Clock,
   XCircle,
   AlertTriangle,
-  DollarSign,
+  Banknote,
 } from "lucide-react";
 
 export default function PaymentsPage() {
@@ -16,11 +16,11 @@ export default function PaymentsPage() {
   const [filter, setFilter] = useState("all");
 
   const payments = [
-    { id: "p1", amount: 249, type: "vendor payout", status: "pending" },
-    { id: "p2", amount: 119, type: "platform fee", status: "completed" },
-    { id: "p3", amount: 520, type: "vendor payout", status: "failed" },
-    { id: "p4", amount: 89, type: "refund", status: "completed" },
-    { id: "p5", amount: 1020, type: "platform fee", status: "processing" },
+    { id: "p1", amount: 249000, type: "vendor payout", status: "pending" },
+    { id: "p2", amount: 119000, type: "platform fee", status: "completed" },
+    { id: "p3", amount: 520000, type: "vendor payout", status: "failed" },
+    { id: "p4", amount: 89000, type: "refund", status: "completed" },
+    { id: "p5", amount: 102000, type: "platform fee", status: "processing" },
   ];
 
   /* ================= FILTER ================= */
@@ -62,8 +62,8 @@ export default function PaymentsPage() {
 
         <Stat
           label="Total Volume"
-          value={`$${totalRevenue}`}
-          icon={<DollarSign size={16} />}
+          value={`₦${totalRevenue}`}
+          icon={<Banknote size={16} />}
         />
 
         <Stat
@@ -151,7 +151,7 @@ export default function PaymentsPage() {
               <div className="text-right flex flex-col items-end gap-2">
 
                 <p className="text-xl font-bold text-green-400">
-                  ${p.amount}
+                  ₦{p.amount}
                 </p>
 
                 <p className="text-xs text-white/40">Transaction amount</p>

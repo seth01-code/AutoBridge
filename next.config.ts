@@ -15,6 +15,18 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "commons.wikimedia.org",
       },
+
+      // ✅ Jumia CDN
+      {
+        protocol: "https",
+        hostname: "ng.jumia.is",
+      },
+
+      // ✅ PricePally CDN
+      {
+        protocol: "https",
+        hostname: "www.pricepally.com",
+      },
     ],
   },
 

@@ -67,7 +67,7 @@ export default function OrdersPage() {
 
       {/* STATS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Revenue" value={`$${totalRevenue}`} icon="💰" />
+        <Stat label="Revenue" value={`₦${totalRevenue}`} icon="₦" />
         <Stat label="Processing" value={processing} icon={<Clock size={16} />} />
         <Stat label="In Transit" value={transit} icon={<Truck size={16} />} />
         <Stat label="Delivered" value={delivered} icon={<CheckCircle2 size={16} />} />
@@ -145,7 +145,7 @@ export default function OrdersPage() {
 
                 <div className="text-right">
                   <p className="text-lg font-bold text-green-400">
-                    ${o.amount}
+                    ₦{o.amount}
                   </p>
                   <p className="text-xs text-white/40">Order value</p>
                 </div>

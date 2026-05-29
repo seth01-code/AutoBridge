@@ -9,7 +9,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  DollarSign,
+  Banknote,
   Truck,
   Activity,
   ShieldAlert,
@@ -49,10 +49,7 @@ export default function AdminDashboard() {
   const pendingOrders = orders.filter((o) => o.status === "processing").length;
   const deliveredOrders = orders.filter((o) => o.status === "delivered").length;
 
-  const revenue = orders.reduce(
-    (sum, o) => sum + (o.amount || 0),
-    0
-  );
+  const revenue = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
 
   const activeUsers = users.filter((u) => u.status === "active").length;
 
@@ -93,7 +90,7 @@ export default function AdminDashboard() {
         />
 
         <KpiCard
-          icon={<DollarSign />}
+          icon={<Banknote />}
           label="Revenue"
           value={`₦${revenue.toLocaleString()}`}
           trend="+18%"
@@ -214,14 +211,8 @@ export default function AdminDashboard() {
               text="Payment gateway latency increased"
               severity="medium"
             />
-            <AlertItem
-              text="2 failed shipments detected"
-              severity="high"
-            />
-            <AlertItem
-              text="Low stock alert on 12 products"
-              severity="low"
-            />
+            <AlertItem text="2 failed shipments detected" severity="high" />
+            <AlertItem text="Low stock alert on 12 products" severity="low" />
           </div>
         </div>
       </div>
@@ -235,9 +226,7 @@ function KpiCard({ icon, label, value, trend, color }: any) {
   return (
     <div className="bg-white/5 border border-white/10 rounded-xl p-4">
       <div className="flex items-center justify-between">
-        <div className={`p-2 rounded-lg bg-white/5 ${color}`}>
-          {icon}
-        </div>
+        <div className={`p-2 rounded-lg bg-white/5 ${color}`}>{icon}</div>
         <span className="text-xs text-green-400">{trend}</span>
       </div>
 
@@ -252,8 +241,8 @@ function ActivityItem({ text, time, type }: any) {
     type === "success"
       ? "text-green-400"
       : type === "warning"
-      ? "text-yellow-400"
-      : "text-red-400";
+        ? "text-yellow-400"
+        : "text-red-400";
 
   return (
     <div className="flex justify-between">
@@ -271,10 +260,7 @@ function HealthBar({ label, value }: any) {
         <span>{value}%</span>
       </div>
       <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-orange-500"
-          style={{ width: `${value}%` }}
-        />
+        <div className="h-full bg-orange-500" style={{ width: `${value}%` }} />
       </div>
     </div>
   );
@@ -284,9 +270,7 @@ function ActionButton({ label, count }: any) {
   return (
     <button className="w-full flex justify-between items-center px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition text-sm">
       <span>{label}</span>
-      {count !== undefined && (
-        <span className="text-orange-400">{count}</span>
-      )}
+      {count !== undefined && <span className="text-orange-400">{count}</span>}
     </button>
   );
 }
@@ -296,8 +280,8 @@ function AlertItem({ text, severity }: any) {
     severity === "high"
       ? "text-red-400"
       : severity === "medium"
-      ? "text-yellow-400"
-      : "text-blue-400";
+        ? "text-yellow-400"
+        : "text-blue-400";
 
   return <p className={color}>• {text}</p>;
 }

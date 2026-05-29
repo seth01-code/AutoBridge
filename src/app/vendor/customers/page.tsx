@@ -6,7 +6,7 @@ import {
   Search,
   Users,
   ShoppingCart,
-  DollarSign,
+  Banknote,
   Star,
   UserCheck,
 } from "lucide-react";
@@ -160,7 +160,7 @@ export default function VendorCustomersPage() {
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <DollarSign size={14} />
+                  <Banknote size={14} />
                   <span>₦{c.totalSpent.toLocaleString()}</span>
                 </div>
               </div>

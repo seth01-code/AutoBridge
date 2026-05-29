@@ -4,7 +4,7 @@ import AppShell from "../layouts/AppShell";
 import {
   ShoppingBag,
   Package,
-  DollarSign,
+  Banknote,
   Clock,
   TrendingUp,
 } from "lucide-react";
@@ -60,7 +60,7 @@ export default function VendorDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
           <KpiCard
-            icon={<DollarSign />}
+            icon={<Banknote />}
             label="Revenue"
             value={`₦${totalRevenue.toLocaleString()}`}
           />

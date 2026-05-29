@@ -103,7 +103,7 @@ function TrackerSkeleton() {
   );
 }
 
-export default function Page() {
+export default function TrackingPage() {
   return (
     <Suspense fallback={<TrackerSkeleton />}>
       <TrackerClient />

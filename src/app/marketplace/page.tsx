@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import AppShell from "../layouts/AppShell";
-import { products as allProducts, Product } from "../../data/product";
+import { ProductUI } from "../../types/product-ui";
 
 import {
   Search,
@@ -18,133 +17,125 @@ import {
   Zap,
   Check,
   X,
+  Package,
+  Sparkles,
+  Store,
 } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
+import Footer from "../components/layout/Footer";
+import CartDrawer from "../components/Cart/cartDrawer"; // adjust path
+import { useCart } from "../context/Cartcontext";           // adjust path
 
-const CATEGORIES = [
-  "Fashion",
-  "Electronics",
-  "Home",
-  "Beauty",
-  "Sports",
-];
-
-type CartItem = Product & {
-  qty: number;
+/* ─────────────────────────────────────────────
+   VENDOR ID → DISPLAY NAME MAP
+───────────────────────────────────────────── */
+const VENDOR_NAMES: Record<string, string> = {
+  "VENDOR-MOCK-001": "AutoBridge Vendor",
 };
 
+function resolveVendorName(vendorId: string): string {
+  return VENDOR_NAMES[vendorId] ?? vendorId;
+}
+
+/* ─────────────────────────────────────────────
+   SKELETON CARD
+───────────────────────────────────────────── */
+function SkeletonCard({ list = false }: { list?: boolean }) {
+  return (
+    <div
+      className={`bg-white/5 border border-white/10 rounded-3xl overflow-hidden animate-pulse ${
+        list ? "flex gap-6" : ""
+      }`}
+    >
+      <div className={`bg-white/10 ${list ? "w-[280px] flex-shrink-0 h-48" : "aspect-square"}`} />
+      <div className={`p-5 flex flex-col gap-3 ${list ? "flex-1" : ""}`}>
+        <div className="h-3 w-1/3 bg-white/10 rounded-full" />
+        <div className="h-5 w-3/4 bg-white/10 rounded-full" />
+        <div className="h-4 w-1/2 bg-white/10 rounded-full" />
+        <div className="mt-auto flex justify-between items-end">
+          <div className="h-7 w-28 bg-white/10 rounded-full" />
+          <div className="h-12 w-12 bg-white/10 rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   MAIN PAGE
+───────────────────────────────────────────── */
 export default function MarketplacePage() {
-  /* ================= STATE ================= */
+  /* ── CART CONTEXT ── */
+  const {
+    addToCart,
+    cartCount,
+    wishlist,
+    toggleWishlist,
+    isWishlisted,
+    openDrawer,
+  } = useCart();
 
+  /* ── LOCAL UI STATE ── */
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-
   const [search, setSearch] = useState("");
-
+  const [allProducts, setAllProducts] = useState<ProductUI[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
   const [page, setPage] = useState(1);
-
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-
   const [minRating, setMinRating] = useState<number | null>(null);
-
   const [minPrice, setMinPrice] = useState<number | null>(null);
-
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
-
   const [inStockOnly, setInStockOnly] = useState(false);
-
   const [sort, setSort] = useState("popular");
-
-  const [wishlist, setWishlist] = useState<number[]>([]);
-
-  const [cart, setCart] = useState<CartItem[]>([]);
-
-  const [cartOpen, setCartOpen] = useState(false);
 
   const PER_PAGE = 12;
 
-  /* ================= LOAD CART ================= */
+  /* ── FETCH PRODUCTS ── */
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoadingProducts(true);
+      const res = await fetch("/api/products?vendorId=VENDOR-MOCK-001");
+      const data = await res.json();
+      if (!data.success) return;
 
-  useEffect(() => {
-    const storedCart = localStorage.getItem("marketplace_cart");
+      const mapped: ProductUI[] = data.data.map((p: any) => ({
+        id: p._id,
+        name: p.name,
+        slug: p.slug,
+        description: p.description ?? "",
+        sku: p.sku,
+        vendor: resolveVendorName(p.vendorId ?? ""),
+        category: p.category,
+        images: p.images ?? [],
+        image: p.images?.[0] ?? "/placeholder.png",
+        price: p.price,
+        originalPrice: p.comparePrice ?? null,
+        rating: p.rating ?? 0,
+        reviews: p.reviewsCount ?? 0,
+        stock: p.stock ?? 0,
+        inStock: p.inStock ?? p.stock > 0,
+        createdAt: new Date(p.createdAt).getTime(),
+        tag: p.featured ? "Trending" : null,
+      }));
 
-    if (storedCart) {
-      setCart(JSON.parse(storedCart));
-    }
-
-    const storedWishlist = localStorage.getItem(
-      "marketplace_wishlist"
-    );
-
-    if (storedWishlist) {
-      setWishlist(JSON.parse(storedWishlist));
+      setAllProducts(mapped);
+      setCategories(Array.from(new Set(mapped.map((p) => p.category))).sort());
+    } catch (err) {
+      console.error("Failed to fetch products:", err);
+    } finally {
+      setLoadingProducts(false);
     }
   }, []);
 
-  /* ================= SAVE CART ================= */
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
-  useEffect(() => {
-    localStorage.setItem(
-      "marketplace_cart",
-      JSON.stringify(cart)
-    );
-  }, [cart]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "marketplace_wishlist",
-      JSON.stringify(wishlist)
-    );
-  }, [wishlist]);
-
-  /* ================= HELPERS ================= */
-
+  /* ── HELPERS ── */
   function toggleCategory(category: string) {
     setPage(1);
-
     setSelectedCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((c) => c !== category)
-        : [...prev, category]
+      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
     );
-  }
-
-  function toggleWishlist(id: number) {
-    setWishlist((prev) =>
-      prev.includes(id)
-        ? prev.filter((item) => item !== id)
-        : [...prev, id]
-    );
-  }
-
-  function addToCart(product: Product) {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id
-            ? {
-                ...item,
-                qty: item.qty + 1,
-              }
-            : item
-        );
-      }
-
-      return [
-        ...prev,
-        {
-          ...product,
-          qty: 1,
-        },
-      ];
-    });
-
-    setCartOpen(true);
-  }
-
-  function removeFromCart(id: number) {
-    setCart((prev) => prev.filter((item) => item.id !== id));
   }
 
   function clearFilters() {
@@ -157,796 +148,677 @@ export default function MarketplacePage() {
     setSort("popular");
   }
 
-  /* ================= FILTERING ================= */
-
+  /* ── FILTERING ── */
   const filtered = useMemo(() => {
-    let data = [...allProducts];
-
-    /* SEARCH */
-
-    if (search) {
+    let data = [...(allProducts ?? [])];
+    if (search)
       data = data.filter(
         (p) =>
           p.name.toLowerCase().includes(search.toLowerCase()) ||
           p.vendor.toLowerCase().includes(search.toLowerCase()) ||
           p.category.toLowerCase().includes(search.toLowerCase())
       );
-    }
-
-    /* CATEGORY */
-
-    if (selectedCategories.length > 0) {
-      data = data.filter((p) =>
-        selectedCategories.includes(p.category)
-      );
-    }
-
-    /* RATING */
-
-    if (minRating) {
-      data = data.filter((p) => p.rating >= minRating);
-    }
-
-    /* PRICE */
-
-    if (minPrice !== null) {
-      data = data.filter((p) => p.price >= minPrice);
-    }
-
-    if (maxPrice !== null) {
-      data = data.filter((p) => p.price <= maxPrice);
-    }
-
-    /* STOCK */
-
-    if (inStockOnly) {
-      data = data.filter((p) => p.inStock);
-    }
-
-    /* SORT */
-
-    if (sort === "price_low") {
-      data.sort((a, b) => a.price - b.price);
-    }
-
-    if (sort === "price_high") {
-      data.sort((a, b) => b.price - a.price);
-    }
-
-    if (sort === "rating") {
-      data.sort((a, b) => b.rating - a.rating);
-    }
-
-    if (sort === "newest") {
-      data.sort((a, b) => b.createdAt - a.createdAt);
-    }
-
-    if (sort === "popular") {
-      data.sort((a, b) => b.reviews - a.reviews);
-    }
-
+    if (selectedCategories.length > 0)
+      data = data.filter((p) => selectedCategories.includes(p.category));
+    if (minRating) data = data.filter((p) => p.rating >= minRating);
+    if (minPrice !== null) data = data.filter((p) => p.price >= minPrice);
+    if (maxPrice !== null) data = data.filter((p) => p.price <= maxPrice);
+    if (inStockOnly) data = data.filter((p) => p.inStock);
+    if (sort === "price_low") data.sort((a, b) => a.price - b.price);
+    if (sort === "price_high") data.sort((a, b) => b.price - a.price);
+    if (sort === "rating") data.sort((a, b) => b.rating - a.rating);
+    if (sort === "newest") data.sort((a, b) => b.createdAt - a.createdAt);
+    if (sort === "popular") data.sort((a, b) => b.reviews - a.reviews);
     return data;
-  }, [
-    search,
-    selectedCategories,
-    minRating,
-    minPrice,
-    maxPrice,
-    inStockOnly,
-    sort,
-  ]);
+  }, [allProducts, search, selectedCategories, minRating, minPrice, maxPrice, inStockOnly, sort]);
 
-  /* ================= PAGINATION ================= */
-
+  /* ── PAGINATION ── */
   const totalPages = Math.ceil(filtered.length / PER_PAGE);
-
   const paginated = useMemo(() => {
     const start = (page - 1) * PER_PAGE;
-
     return filtered.slice(start, start + PER_PAGE);
   }, [filtered, page]);
 
-  /* ================= TOTAL ================= */
+  /* ── Cart product shape for context ── */
+  function toCartProduct(p: ProductUI) {
+    return {
+      id: p.id,
+      name: p.name,
+      image: p.image,
+      vendor: p.vendor,
+      price: p.price,
+      inStock: p.inStock,
+    };
+  }
 
-  const cartTotal = cart.reduce(
-    (sum, item) => sum + item.price * item.qty,
-    0
-  );
+  /* ── Wishlist products for the drawer ── */
+  const cartProducts = allProducts.map(toCartProduct);
 
+  /* ══════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════ */
   return (
     <>
-    <Navbar />
-      <div className="bg-[#0B1120] min-h-screen text-white">
+      <Navbar />
 
-        {/* ================= CART DRAWER ================= */}
+      {/* CartDrawer — passes all products so wishlist can render details */}
+      <CartDrawer allProducts={cartProducts} />
 
-        {cartOpen && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex justify-end">
-
-            <div className="w-full sm:w-[420px] bg-[#0F172A] h-full border-l border-white/10 flex flex-col">
-
-              {/* HEADER */}
-
-              <div className="flex items-center justify-between p-5 border-b border-white/10">
-                <h2 className="text-xl font-bold">
-                  Shopping Cart
-                </h2>
-
-                <button
-                  onClick={() => setCartOpen(false)}
-                  className="hover:text-orange-400"
-                >
-                  <X />
-                </button>
-              </div>
-
-              {/* ITEMS */}
-
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
-
-                {cart.length === 0 ? (
-                  <div className="text-center text-white/50 pt-20">
-                    Cart is empty
-                  </div>
-                ) : (
-                  cart.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex gap-3 border border-white/10 rounded-xl p-3"
-                    >
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-20 h-20 rounded-lg object-cover"
-                      />
-
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-sm">
-                          {item.name}
-                        </h4>
-
-                        <p className="text-white/50 text-xs mt-1">
-                          Qty: {item.qty}
-                        </p>
-
-                        <p className="mt-2 font-bold text-orange-400">
-                          ₦
-                          {(
-                            item.price * item.qty
-                          ).toLocaleString()}
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() =>
-                          removeFromCart(item.id)
-                        }
-                        className="text-red-400 text-sm"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))
-                )}
-
-              </div>
-
-              {/* FOOTER */}
-
-              <div className="border-t border-white/10 p-5">
-
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-white/60">
-                    Total
-                  </span>
-
-                  <span className="font-bold text-xl">
-                    ₦{cartTotal.toLocaleString()}
-                  </span>
-                </div>
-
-                <Link href="/checkout">
-                  <button className="w-full bg-orange-500 hover:bg-orange-600 transition-all py-3 rounded-xl font-semibold">
-                    Proceed to Checkout
-                  </button>
-                </Link>
-
-              </div>
-
-            </div>
-
-          </div>
-        )}
-
-        {/* ================= PAGE ================= */}
-
+      <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
         <div className="p-6 space-y-8">
 
-          {/* ================= HERO ================= */}
+          {/* ── HERO ── */}
+          <div className="relative bg-gradient-to-br from-[var(--surface)] to-[var(--background)] border border-[var(--border)] rounded-3xl p-8 overflow-hidden">
+  {/* decorative blobs */}
+  <div className="pointer-events-none absolute -top-20 -right-20 w-64 h-64 rounded-full bg-[var(--primary)]/10 blur-3xl" />
+  <div className="pointer-events-none absolute bottom-0 left-10 w-40 h-40 rounded-full bg-[var(--primary)]/5 blur-2xl" />
 
-          <div className="bg-gradient-to-br from-[#111827] to-[#0F172A] border border-white/10 rounded-3xl p-8">
+  <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
 
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+    {/* LEFT TEXT */}
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles size={16} className="text-[var(--primary)]" />
+        <span className="text-[var(--primary)] text-sm font-medium">
+          Verified Vendors
+        </span>
+      </div>
 
-              <div>
-                <h1 className="text-4xl font-bold">
-                  Discover Premium Products
-                </h1>
+      <h1 className="text-4xl font-bold leading-tight text-[var(--text-primary)]">
+        Discover Premium<br />Products
+      </h1>
 
-                <p className="text-white/50 mt-3 max-w-2xl">
-                  Shop from verified vendors across fashion,
-                  electronics, beauty, sports and more.
-                </p>
-              </div>
+      <p className="mt-3 max-w-xl text-[var(--text-secondary)]">
+        Shop from verified vendors across food, fashion, electronics, beauty and more.
+      </p>
+    </div>
 
-              <button
-                onClick={() => setCartOpen(true)}
-                className="bg-orange-500 hover:bg-orange-600 transition-all px-5 py-3 rounded-xl flex items-center gap-3 self-start"
-              >
-                <ShoppingCart size={18} />
+    {/* ACTIONS */}
+    <div className="flex items-center gap-3 self-start">
 
-                Cart ({cart.length})
-              </button>
+      {/* Wishlist */}
+      <button
+        onClick={() => openDrawer("wishlist")}
+        className="relative bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--primary-border)] hover:bg-[var(--primary-light)] transition-all px-4 py-3 rounded-xl flex items-center gap-2"
+      >
+        <Heart
+          size={18}
+          className={wishlist.length > 0 ? "text-red-500 fill-red-500" : "text-[var(--text-secondary)]"}
+        />
+        <span className="text-sm text-[var(--text-primary)]">Saved</span>
 
-            </div>
+        {wishlist.length > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+            {wishlist.length}
+          </span>
+        )}
+      </button>
 
-            {/* SEARCH */}
+      {/* Cart */}
+      <button
+        onClick={() => openDrawer("cart")}
+        className="relative bg-[var(--primary)] hover:opacity-90 active:scale-[0.98] transition-all px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-black/10"
+      >
+        <ShoppingCart size={18} className="text-white" />
+        <span className="text-sm font-medium text-white">Cart</span>
 
-            <div className="mt-8 max-w-2xl relative">
+        {cartCount > 0 && (
+          <span className="bg-white text-[var(--primary)] text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+            {cartCount}
+          </span>
+        )}
+      </button>
+    </div>
+  </div>
 
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+  {/* SEARCH */}
+  <div className="relative mt-8 max-w-2xl">
+    <Search
+      className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+      size={18}
+    />
 
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search products, vendors or categories..."
-                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white/5 border border-white/10 outline-none focus:border-orange-500"
-              />
+    <input
+      value={search}
+      onChange={(e) => {
+        setSearch(e.target.value);
+        setPage(1);
+      }}
+      placeholder="Search products, vendors or categories…"
+      className="w-full pl-12 pr-4 py-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] outline-none focus:border-[var(--primary)] transition-all text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+    />
 
-            </div>
+    {search && (
+      <button
+        onClick={() => setSearch("")}
+        className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+      >
+        <X size={16} />
+      </button>
+    )}
+  </div>
+</div>
 
-          </div>
-
-          {/* ================= BODY ================= */}
-
+          {/* ── BODY ── */}
           <div className="flex flex-col lg:flex-row gap-8">
 
-            {/* ================= SIDEBAR ================= */}
-
-            <aside className="lg:w-72 space-y-5">
-
-              <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-6">
-
-                {/* TITLE */}
-
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal
-                    size={18}
-                    className="text-orange-400"
-                  />
-
-                  <h3 className="font-semibold">
-                    Filters
-                  </h3>
-                </div>
-
-                {/* CATEGORY */}
-
-                <div>
-                  <p className="text-sm text-white/60 mb-3">
-                    Categories
-                  </p>
-
-                  <div className="space-y-3">
-
-                    {CATEGORIES.map((category) => (
-                      <label
-                        key={category}
-                        className="flex items-center gap-3 text-sm text-white/70 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedCategories.includes(
-                            category
-                          )}
-                          onChange={() =>
-                            toggleCategory(category)
-                          }
-                        />
-
-                        {category}
-                      </label>
-                    ))}
-
-                  </div>
-                </div>
-
-                {/* PRICE */}
-
-                <div className="pt-5 border-t border-white/10">
-
-                  <p className="text-sm text-white/60 mb-3">
-                    Price Range
-                  </p>
-
-                  <div className="flex gap-3">
-
-                    <input
-                      type="number"
-                      placeholder="Min"
-                      value={minPrice ?? ""}
-                      onChange={(e) =>
-                        setMinPrice(
-                          Number(e.target.value) || null
-                        )
-                      }
-                      className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm"
-                    />
-
-                    <input
-                      type="number"
-                      placeholder="Max"
-                      value={maxPrice ?? ""}
-                      onChange={(e) =>
-                        setMaxPrice(
-                          Number(e.target.value) || null
-                        )
-                      }
-                      className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm"
-                    />
-
-                  </div>
-
-                </div>
-
-                {/* RATING */}
-
-                <div className="pt-5 border-t border-white/10">
-
-                  <p className="text-sm text-white/60 mb-3">
-                    Minimum Rating
-                  </p>
-
-                  <div className="space-y-3">
-
-                    {[5, 4, 3].map((rating) => (
-                      <label
-                        key={rating}
-                        className="flex items-center gap-3 cursor-pointer"
-                      >
-                        <input
-                          type="radio"
-                          name="rating"
-                          checked={minRating === rating}
-                          onChange={() =>
-                            setMinRating(rating)
-                          }
-                        />
-
-                        <div className="flex items-center gap-1 text-sm">
-                          {[...Array(rating)].map((_, i) => (
-                            <Star
-                              key={i}
-                              size={14}
-                              className="fill-yellow-400 text-yellow-400"
-                            />
-                          ))}
-
-                          <span className="ml-1 text-white/60">
-                            & up
-                          </span>
-                        </div>
-                      </label>
-                    ))}
-
-                  </div>
-
-                </div>
-
-                {/* STOCK */}
-
-                <div className="pt-5 border-t border-white/10">
-
-                  <label className="flex items-center gap-3 cursor-pointer text-sm text-white/70">
-
-                    <input
-                      type="checkbox"
-                      checked={inStockOnly}
-                      onChange={() =>
-                        setInStockOnly(!inStockOnly)
-                      }
-                    />
-
-                    In Stock Only
-
-                  </label>
-
-                </div>
-
-                {/* CLEAR */}
-
-                <button
-                  onClick={clearFilters}
-                  className="w-full bg-white/5 hover:bg-white/10 transition-all py-3 rounded-xl text-sm"
-                >
-                  Clear Filters
-                </button>
-
-              </div>
-
-              {/* BUYER PROTECTION */}
-
-              <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-3xl p-6">
-
-                <Shield className="mb-4" />
-
-                <h3 className="font-bold text-lg">
-                  Buyer Protection
-                </h3>
-
-                <p className="text-white/80 text-sm mt-2">
-                  All purchases are protected with secure
-                  checkout and verified vendor protection.
-                </p>
-
-              </div>
-
-            </aside>
-
-            {/* ================= PRODUCTS ================= */}
-
-            <main className="flex-1">
-
-              {/* TOPBAR */}
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-
-                <p className="text-white/60 text-sm">
-                  Showing{" "}
-                  <span className="text-white font-semibold">
-                    {filtered.length}
-                  </span>{" "}
-                  products
-                </p>
-
-                <div className="flex items-center gap-3">
-
-                  {/* SORT */}
-
-                  <select
-                    value={sort}
-                    onChange={(e) =>
-                      setSort(e.target.value)
-                    }
-                    className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm"
-                  >
-                    <option value="popular">
-                      Most Popular
-                    </option>
-
-                    <option value="price_low">
-                      Price: Low → High
-                    </option>
-
-                    <option value="price_high">
-                      Price: High → Low
-                    </option>
-
-                    <option value="rating">
-                      Best Rating
-                    </option>
-
-                    <option value="newest">
-                      Newest First
-                    </option>
-                  </select>
-
-                  {/* VIEW */}
-
-                  <div className="flex items-center border border-white/10 rounded-xl p-1">
-
-                    <button
-                      onClick={() =>
-                        setViewMode("grid")
-                      }
-                      className={`p-2 rounded-lg transition-all ${
-                        viewMode === "grid"
-                          ? "bg-orange-500"
-                          : "hover:bg-white/10"
-                      }`}
-                    >
-                      <Grid3x3 size={18} />
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        setViewMode("list")
-                      }
-                      className={`p-2 rounded-lg transition-all ${
-                        viewMode === "list"
-                          ? "bg-orange-500"
-                          : "hover:bg-white/10"
-                      }`}
-                    >
-                      <List size={18} />
-                    </button>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-              {/* ================= PRODUCTS GRID ================= */}
-
+            {/* ── SIDEBAR ── */}
+            <aside className="lg:w-72 space-y-5 flex-shrink-0">
+
+  {/* FILTER CARD */}
+  <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-6 space-y-6">
+
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <SlidersHorizontal size={16} className="text-[var(--primary)]" />
+        <h3 className="font-semibold text-sm text-[var(--text-primary)]">
+          Filters
+        </h3>
+      </div>
+
+      {(selectedCategories.length > 0 || minRating || minPrice || maxPrice || inStockOnly) && (
+        <button
+          onClick={clearFilters}
+          className="text-xs text-[var(--primary)] hover:underline"
+        >
+          Reset all
+        </button>
+      )}
+    </div>
+
+    {/* CATEGORY */}
+    <div>
+      <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">
+        Categories
+      </p>
+
+      <div className="space-y-2">
+        {loadingProducts
+          ? [1, 2, 3, 4].map((i) => (
               <div
-                className={
-                  viewMode === "grid"
-                    ? "grid sm:grid-cols-2 xl:grid-cols-3 gap-6"
-                    : "space-y-5"
-                }
-              >
-
-                {paginated.map((product) => (
-                  
-                  <div
-                    key={product.id}
-                    className={`group bg-white/5 border border-white/10 rounded-3xl overflow-hidden hover:border-orange-500/40 hover:shadow-2xl hover:shadow-orange-500/10 transition-all ${
-                      viewMode === "list"
-                        ? "flex gap-6"
-                        : ""
+                key={i}
+                className="h-4 bg-[var(--surface-2)] rounded-full animate-pulse"
+              />
+            ))
+          : categories.length === 0 ? (
+              <p className="text-[var(--text-muted)] text-sm">No categories</p>
+            ) : (
+              categories.map((cat) => (
+                <label
+                  key={cat}
+                  className="flex items-center gap-3 text-sm text-[var(--text-secondary)] cursor-pointer group"
+                >
+                  <span
+                    className={`w-4 h-4 rounded flex-shrink-0 border transition-all flex items-center justify-center ${
+                      selectedCategories.includes(cat)
+                        ? "bg-[var(--primary)] border-[var(--primary)]"
+                        : "border-[var(--border)] group-hover:border-[var(--primary-border)]"
                     }`}
                   >
+                    {selectedCategories.includes(cat) && (
+                      <Check size={10} className="text-white" />
+                    )}
+                  </span>
 
-                    {/* IMAGE */}
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={selectedCategories.includes(cat)}
+                    onChange={() => toggleCategory(cat)}
+                  />
 
-                    <Link
-                      href={`/marketplace/${product.id}`}
-                      className={
-                        viewMode === "list"
-                          ? "w-[280px] flex-shrink-0"
-                          : ""
-                      }
-                    >
+                  {cat}
+                </label>
+              ))
+            )}
+      </div>
+    </div>
 
-                      <div
-                        className={`relative overflow-hidden ${
-                          viewMode === "list"
-                            ? "h-full"
-                            : "aspect-square"
-                        }`}
-                      >
+    {/* PRICE */}
+    <div className="pt-5 border-t border-[var(--border)]">
+      <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">
+        Price Range
+      </p>
 
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                        />
+      <div className="flex gap-2">
+        <input
+          type="number"
+          placeholder="Min ₦"
+          value={minPrice ?? ""}
+          onChange={(e) => setMinPrice(Number(e.target.value) || null)}
+          className="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded-xl p-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+        />
 
-                        {/* TAG */}
+        <input
+          type="number"
+          placeholder="Max ₦"
+          value={maxPrice ?? ""}
+          onChange={(e) => setMaxPrice(Number(e.target.value) || null)}
+          className="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded-xl p-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+        />
+      </div>
+    </div>
 
-                        {product.tag && (
-                          <div className="absolute top-4 left-4">
+    {/* RATING */}
+    <div className="pt-5 border-t border-[var(--border)]">
+      <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">
+        Min Rating
+      </p>
 
-                            <span className="bg-orange-500 text-white text-xs px-3 py-1 rounded-full flex items-center gap-1">
+      <div className="space-y-2">
+        {[5, 4, 3].map((r) => (
+          <label
+            key={r}
+            className="flex items-center gap-3 cursor-pointer"
+          >
+            <span
+              className={`w-4 h-4 rounded-full flex-shrink-0 border transition-all flex items-center justify-center ${
+                minRating === r
+                  ? "bg-[var(--primary)] border-[var(--primary)]"
+                  : "border-[var(--border)]"
+              }`}
+            >
+              {minRating === r && (
+                <div className="w-1.5 h-1.5 rounded-full bg-white" />
+              )}
+            </span>
 
-                              {product.tag ===
-                                "Trending" && (
-                                <TrendingUp size={12} />
-                              )}
+            <input
+              type="radio"
+              name="rating"
+              className="sr-only"
+              checked={minRating === r}
+              onChange={() => setMinRating(r)}
+            />
 
-                              {product.tag ===
-                                "Fast Shipping" && (
-                                <Zap size={12} />
-                              )}
+            <div className="flex items-center gap-0.5">
+              {[...Array(r)].map((_, i) => (
+                <Star
+                  key={i}
+                  size={12}
+                  className="text-yellow-400 fill-yellow-400"
+                />
+              ))}
+              <span className="ml-1 text-xs text-[var(--text-muted)]">
+                & up
+              </span>
+            </div>
+          </label>
+        ))}
 
-                              {product.tag}
+        {minRating && (
+          <button
+            onClick={() => setMinRating(null)}
+            className="text-xs text-[var(--primary)] hover:underline mt-1"
+          >
+            Clear rating
+          </button>
+        )}
+      </div>
+    </div>
 
-                            </span>
+    {/* STOCK */}
+    <div className="pt-5 border-t border-[var(--border)]">
+      <label className="flex items-center gap-3 cursor-pointer">
+        <span
+          className={`w-4 h-4 rounded flex-shrink-0 border transition-all flex items-center justify-center ${
+            inStockOnly
+              ? "bg-[var(--primary)] border-[var(--primary)]"
+              : "border-[var(--border)]"
+          }`}
+        >
+          {inStockOnly && <Check size={10} className="text-white" />}
+        </span>
 
-                          </div>
-                        )}
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={inStockOnly}
+          onChange={() => setInStockOnly(!inStockOnly)}
+        />
 
-                        {/* WISHLIST */}
+        <span className="text-sm text-[var(--text-secondary)]">
+          In Stock Only
+        </span>
+      </label>
+    </div>
+  </div>
 
-                        <button
-                          onClick={() =>
-                            toggleWishlist(product.id)
-                          }
-                          className="absolute top-4 right-4 bg-black/50 backdrop-blur-md p-2 rounded-full"
-                        >
-                          <Heart
-                            size={16}
-                            className={
-                              wishlist.includes(
-                                product.id
-                              )
-                                ? "fill-red-500 text-red-500"
-                                : "text-white"
-                            }
-                          />
-                        </button>
+  {/* BUYER PROTECTION */}
+  <div className="bg-gradient-to-br from-[var(--primary)] to-orange-600 rounded-3xl p-6 relative overflow-hidden text-white">
 
-                      </div>
+    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_70%_70%,white,transparent)]" />
 
-                    </Link>
+    <Shield className="mb-3 relative" size={24} />
 
-                    {/* CONTENT */}
+    <h3 className="font-bold relative">Buyer Protection</h3>
 
-                    <div
-                      className={`p-5 flex flex-col justify-between ${
-                        viewMode === "list"
-                          ? "flex-1"
-                          : ""
-                      }`}
-                    >
+    <p className="text-white/80 text-xs mt-1.5 relative leading-relaxed">
+      All purchases are protected with secure checkout and verified vendor assurance.
+    </p>
+  </div>
+</aside>
 
-                      <div>
+            {/* ── MAIN ── */}
+            <main className="flex-1 min-w-0">
+              {/* TOPBAR */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+  <p className="text-muted-theme text-sm">
+    {loadingProducts ? (
+      <span className="bg-surface-2 rounded-full h-4 w-28 inline-block animate-pulse" />
+    ) : (
+      <>
+        Showing{" "}
+        <span className="text-primary-theme font-semibold">
+          {filtered.length}
+        </span>{" "}
+        products
+      </>
+    )}
+  </p>
 
-                        <div className="flex items-center justify-between">
+  <div className="flex items-center gap-3">
+    <select
+      value={sort}
+      onChange={(e) => setSort(e.target.value)}
+      className="bg-surface-2 border border-border rounded-xl px-3 py-2.5 text-sm text-primary-theme focus:border-primary outline-none"
+    >
+      <option value="popular">Most Popular</option>
+      <option value="price_low">Price: Low → High</option>
+      <option value="price_high">Price: High → Low</option>
+      <option value="rating">Best Rating</option>
+      <option value="newest">Newest First</option>
+    </select>
 
-                          <p className="text-xs text-white/40">
-                            {product.vendor}
-                          </p>
+    <div className="flex items-center border border-border rounded-xl p-1 bg-surface-2">
+      <button
+        onClick={() => setViewMode("grid")}
+        className={`p-2 rounded-lg transition-all ${
+          viewMode === "grid"
+            ? "bg-primary text-white"
+            : "text-muted-theme hover:bg-surface"
+        }`}
+      >
+        <Grid3x3 size={16} />
+      </button>
 
-                          <div
-                            className={`text-xs flex items-center gap-1 ${
-                              product.inStock
-                                ? "text-green-400"
-                                : "text-red-400"
-                            }`}
-                          >
+      <button
+        onClick={() => setViewMode("list")}
+        className={`p-2 rounded-lg transition-all ${
+          viewMode === "list"
+            ? "bg-primary text-white"
+            : "text-muted-theme hover:bg-surface"
+        }`}
+      >
+        <List size={16} />
+      </button>
+    </div>
+  </div>
+</div>
 
-                            {product.inStock ? (
-                              <Check size={14} />
-                            ) : (
-                              <X size={14} />
-                            )}
+              {/* LOADING SKELETONS */}
+              {loadingProducts && (
+  <div
+    className={
+      viewMode === "grid"
+        ? "grid sm:grid-cols-2 xl:grid-cols-3 gap-6"
+        : "space-y-5"
+    }
+  >
+    {[...Array(6)].map((_, i) => (
+      <SkeletonCard key={i} list={viewMode === "list"} />
+    ))}
+  </div>
+)}
 
-                            {product.inStock
-                              ? "In Stock"
-                              : "Out of Stock"}
+{/* EMPTY STATE */}
+{!loadingProducts && filtered.length === 0 && (
+  <div className="flex flex-col items-center justify-center py-32 text-muted-theme gap-4">
+    <Package size={52} strokeWidth={1} className="text-muted-theme" />
 
-                          </div>
+    <p className="text-lg text-primary-theme">No products found</p>
 
-                        </div>
+    <button
+      onClick={clearFilters}
+      className="text-primary hover:underline text-sm"
+    >
+      Clear all filters
+    </button>
+  </div>
+)}
 
-                        <Link
-                          href={`/product/${product.id}`}
-                        >
-                          <h3 className="mt-3 font-semibold text-lg hover:text-orange-400 transition-all line-clamp-2">
-                            {product.name}
-                          </h3>
-                        </Link>
+              {/* PRODUCTS */}
+             {!loadingProducts && filtered.length > 0 && (
+  <div
+    className={
+      viewMode === "grid"
+        ? "grid sm:grid-cols-2 xl:grid-cols-3 gap-6"
+        : "space-y-5"
+    }
+  >
+    {paginated.map((product) => (
+      <div
+        key={product.id}
+        className={`group bg-surface border border-border rounded-3xl overflow-hidden hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 ${
+          viewMode === "list" ? "flex gap-0" : ""
+        }`}
+      >
+        {/* IMAGE */}
+        <Link
+          href={`/marketplace/${product.id}`}
+          className={viewMode === "list" ? "w-[220px] flex-shrink-0" : "block"}
+        >
+          <div
+            className={`relative overflow-hidden ${
+              viewMode === "list" ? "h-full min-h-[180px]" : "aspect-square"
+            }`}
+          >
+            <img
+              src={product.image}
+              alt={product.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
 
-                        {/* RATING */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                        <div className="flex items-center gap-2 mt-3">
+            {product.tag && (
+              <div className="absolute top-3 left-3">
+                <span className="bg-primary text-white text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1 font-medium shadow-lg">
+                  {product.tag === "Trending" && <TrendingUp size={10} />}
+                  {product.tag === "Fast Shipping" && <Zap size={10} />}
+                  {product.tag}
+                </span>
+              </div>
+            )}
 
-                          <div className="flex items-center gap-1 text-yellow-400">
-                            <Star
-                              size={14}
-                              className="fill-yellow-400"
-                            />
+            {/* WISHLIST */}
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                toggleWishlist(product.id);
+              }}
+              className={`absolute top-3 right-3 p-2 rounded-full backdrop-blur-md transition-all ${
+                isWishlisted(product.id)
+                  ? "bg-red-500 text-white"
+                  : "bg-surface-2 text-muted-theme hover:bg-surface"
+              }`}
+            >
+              <Heart
+                size={14}
+                className={isWishlisted(product.id) ? "fill-white" : ""}
+              />
+            </button>
+          </div>
+        </Link>
 
-                            <span className="text-sm">
-                              {product.rating}
-                            </span>
-                          </div>
+        {/* CONTENT */}
+        <div
+          className={`p-4 flex flex-col justify-between ${
+            viewMode === "list" ? "flex-1" : ""
+          }`}
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1 text-muted-theme text-xs min-w-0">
+                <Store size={11} className="flex-shrink-0" />
+                <span className="truncate">{product.vendor}</span>
+              </div>
 
-                          <span className="text-white/40 text-xs">
-                            ({product.reviews} reviews)
-                          </span>
+              <div
+                className={`text-[11px] flex items-center gap-1 flex-shrink-0 ${
+                  product.inStock ? "text-green-500" : "text-red-500"
+                }`}
+              >
+                {product.inStock ? <Check size={11} /> : <X size={11} />}
+                {product.inStock ? "In Stock" : "Out of Stock"}
+              </div>
+            </div>
 
-                        </div>
+            <Link href={`/product/${product.id}`}>
+              <h3 className="mt-2 font-semibold text-base text-primary-theme hover:text-primary transition-all line-clamp-2 leading-snug">
+                {product.name}
+              </h3>
+            </Link>
 
-                      </div>
-
-                      {/* PRICE */}
-
-                      <div className="mt-5">
-
-                        <div className="flex items-end justify-between gap-3">
-
-                          <div>
-
-                            <div className="flex items-center gap-2">
-
-                              <span className="text-2xl font-bold">
-                                ₦
-                                {product.price.toLocaleString()}
-                              </span>
-
-                              {product.originalPrice && (
-                                <span className="text-white/40 text-sm line-through">
-                                  ₦
-                                  {product.originalPrice.toLocaleString()}
-                                </span>
-                              )}
-
-                            </div>
-
-                            {product.originalPrice && (
-                              <p className="text-green-400 text-xs mt-1">
-
-                                Save{" "}
-                                {Math.round(
-                                  ((product.originalPrice -
-                                    product.price) /
-                                    product.originalPrice) *
-                                    100
-                                )}
-                                %
-
-                              </p>
-                            )}
-
-                          </div>
-
-                          {/* CART */}
-
-                          <button
-                            disabled={!product.inStock}
-                            onClick={() =>
-                              addToCart(product)
-                            }
-                            className={`h-12 w-12 rounded-xl flex items-center justify-center transition-all ${
-                              product.inStock
-                                ? "bg-orange-500 hover:bg-orange-600"
-                                : "bg-gray-700 cursor-not-allowed"
-                            }`}
-                          >
-                            <ShoppingCart size={18} />
-                          </button>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                  </div>
+            <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    size={11}
+                    className={
+                      i < Math.round(product.rating)
+                        ? "fill-yellow-400 text-yellow-400"
+                        : "text-border"
+                    }
+                  />
                 ))}
-
               </div>
-
-              {/* ================= PAGINATION ================= */}
-
-              <div className="flex justify-center mt-12">
-
-                <div className="flex items-center gap-2">
-
-                  {Array.from({
-                    length: totalPages,
-                  })
-                    .slice(0, 6)
-                    .map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() =>
-                          setPage(i + 1)
-                        }
-                        className={`w-11 h-11 rounded-xl transition-all ${
-                          page === i + 1
-                            ? "bg-orange-500"
-                            : "bg-white/5 hover:bg-white/10"
-                        }`}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-
-                </div>
-
-              </div>
-
-            </main>
-
+              <span className="text-muted-theme text-xs">
+                ({product.reviews})
+              </span>
+            </div>
           </div>
 
-        </div>
+          {/* PRICE + ACTION */}
+          <div className="mt-4 flex items-end justify-between gap-3">
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold text-primary-theme">
+                  ₦{product.price.toLocaleString()}
+                </span>
 
+                {product.originalPrice && (
+                  <span className="text-muted-theme text-xs line-through">
+                    ₦{product.originalPrice.toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              {product.originalPrice && (
+                <p className="text-green-500 text-[11px] mt-0.5">
+                  Save{" "}
+                  {Math.round(
+                    ((product.originalPrice - product.price) /
+                      product.originalPrice) *
+                      100
+                  )}
+                  %
+                </p>
+              )}
+            </div>
+
+            {/* ADD TO CART */}
+            <button
+              disabled={!product.inStock}
+              onClick={() => addToCart(toCartProduct(product))}
+              className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all active:scale-95 ${
+                product.inStock
+                  ? "bg-primary text-white hover:bg-primary-hover shadow-glow"
+                  : "bg-surface-2 text-muted-theme cursor-not-allowed"
+              }`}
+            >
+              <ShoppingCart size={16} />
+            </button>
+          </div>
+        </div>
       </div>
+    ))}
+  </div>
+)}
+
+              {/* PAGINATION */}
+              {totalPages > 1 && (
+  <div className="flex justify-center mt-12">
+    <div className="flex items-center gap-2 bg-surface-2 border border-border rounded-2xl p-2">
+
+      {/* PREV */}
+      <button
+        disabled={page === 1}
+        onClick={() => {
+          setPage((p) => Math.max(1, p - 1));
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+          page === 1
+            ? "opacity-40 cursor-not-allowed text-muted-theme"
+            : "hover:bg-surface text-primary-theme"
+        }`}
+      >
+        ‹
+      </button>
+
+      {/* PAGES */}
+      {Array.from({ length: totalPages })
+        .slice(
+          Math.max(0, page - 3),
+          Math.min(totalPages, page + 2)
+        )
+        .map((_, i, arr) => {
+          const pageNumber =
+            Math.max(0, page - 3) + i + 1;
+
+          return (
+            <button
+              key={pageNumber}
+              onClick={() => {
+                setPage(pageNumber);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className={`w-10 h-10 rounded-xl text-sm transition-all ${
+                page === pageNumber
+                  ? "bg-primary text-white shadow-glow"
+                  : "bg-surface hover:bg-surface-2 text-muted-theme"
+              }`}
+            >
+              {pageNumber}
+            </button>
+          );
+        })}
+
+      {/* NEXT */}
+      <button
+        disabled={page === totalPages}
+        onClick={() => {
+          setPage((p) => Math.min(totalPages, p + 1));
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+          page === totalPages
+            ? "opacity-40 cursor-not-allowed text-muted-theme"
+            : "hover:bg-surface text-primary-theme"
+        }`}
+      >
+        ›
+      </button>
+    </div>
+  </div>
+)}
+            </main>
+          </div>
+        </div>
+      </div>
+      <Footer/>
     </>
   );
 }

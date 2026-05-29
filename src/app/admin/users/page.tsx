@@ -7,7 +7,7 @@ import {
   Ban,
   CheckCircle2,
   MoreVertical,
-  Shield,
+  User,
   AlertTriangle,
   Wallet,
   ShoppingBag,
@@ -96,7 +96,7 @@ export default function UsersPage() {
 
       {/* STATS */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <Stat label="Total Users" value={users.length} icon={<Shield />} />
+        <Stat label="Total Users" value={users.length} icon={<User />} />
         <Stat label="Active" value={users.filter(u => u.status === "active").length} />
         <Stat label="Vendors" value={users.filter(u => u.role === "vendor").length} />
         <Stat label="High Risk" value={users.filter(u => u.risk === "high").length} />

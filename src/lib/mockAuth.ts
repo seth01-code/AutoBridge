@@ -16,7 +16,7 @@ const MOCK_USERS: MockUser[] = [
   },
   {
     id: "2",
-    name: "Vendor Jane",
+    name: "AutoBridge Vendor",
     email: "vendor@demo.com",
     role: "vendor",
   },

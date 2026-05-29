@@ -218,7 +218,7 @@ export default function VendorSettingsPage() {
             </div>
           </Section>
 
-          {/* API KEYS (FUTURE READY) */}
+          {/* API KEYS (FUTURE READY)
           <Section title="API Access" icon={<KeyRound size={18} />}>
             <div className="text-white/50 text-sm mb-3">
               Generate API keys for integrations (coming soon)
@@ -227,7 +227,7 @@ export default function VendorSettingsPage() {
             <button className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl hover:bg-white/10">
               Generate API Key
             </button>
-          </Section>
+          </Section> */}
 
         </div>
       </div>

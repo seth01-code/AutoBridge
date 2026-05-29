@@ -3,7 +3,7 @@
 import AppShell from "@/app/layouts/AppShell";
 import {
   TrendingUp,
-  DollarSign,
+  Banknote,
   ShoppingCart,
   Users,
   ArrowUpRight,
@@ -51,7 +51,7 @@ const analyticsCards = [
     value: `₦${totalRevenue.toLocaleString()}`,
     growth: "+12.4%",
     positive: true,
-    icon: DollarSign,
+    icon: Banknote,
   },
   {
     title: "Orders",
