@@ -219,6 +219,7 @@ export default function VendorOrdersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId:          selectedOrder._id,
+          dhlProductCode:   selectedOrder.shipping.dhlProductCode ?? "N",
           recipientName:    shipForm.recipientName,
           recipientPhone:   shipForm.recipientPhone,
           recipientEmail:   shipForm.recipientEmail,

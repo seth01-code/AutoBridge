@@ -12,7 +12,7 @@ const SHIPPER = {
   email:        "dispatch@autobridge.ng",
   addressLine1: "1 Broad Street",
   cityName:     "Lagos",
-  postalCode:   "101001",   // ✅ valid Lagos GPO
+  postalCode:   "101001",
   countryCode:  "NG",
 };
 
@@ -22,7 +22,6 @@ const COUNTRY_TO_ISO: Record<string, string> = {
   Canada: "CA", Germany: "DE", France: "FR", UAE: "AE",
 };
 
-// ✅ real postal fallbacks — never send "00000" for NG
 const POSTAL_FALLBACK: Record<string, string> = {
   NG: "101001", GH: "00233", KE: "00100", ZA: "0001",
   GB: "W1A1AA", US: "10001", CA: "M5H2N2",
@@ -49,7 +48,8 @@ export async function POST(req: NextRequest) {
       addressLine1,
       city,
       postalCode,
-      countryCode: rawCountry,  // ISO code like "NG" sent by vendor orders page
+      countryCode: rawCountry,
+      dhlProductCode   = "P",
       totalWeightKg    = 1,
       declaredValueUSD = 50,
       items            = [],
@@ -87,7 +87,6 @@ export async function POST(req: NextRequest) {
     const isDomestic  = destCountry === "NG";
     const weightKg    = Math.max(Number(totalWeightKg) || 1, 0.1);
 
-    // ✅ next business day, DHL shipment format requires space before GMT
     const shipDate = new Date();
     shipDate.setDate(shipDate.getDate() + 1);
     while (shipDate.getDay() === 0 || shipDate.getDay() === 6)
@@ -104,14 +103,13 @@ export async function POST(req: NextRequest) {
 
     const invoiceDate = new Date().toISOString().split("T")[0];
 
-    const HS_CODE = "8708.99"; // auto parts — update if you sell other categories
+    const HS_CODE = "8708.99";
 
     const payload: any = {
       plannedShippingDateAndTime: plannedDate,
       pickup:      { isRequested: false },
-      productCode: "P",
+      productCode: dhlProductCode,
 
-      // ✅ shipment endpoint uses "shipper" (rates endpoint uses "account" — they differ)
       accounts: [{ typeCode: "shipper", number: accountNumber }],
 
       customerDetails: {
@@ -134,7 +132,7 @@ export async function POST(req: NextRequest) {
           postalAddress: {
             addressLine1: addressLine1 || "1 Main Street",
             cityName:     city,
-            postalCode:   safePostal(destCountry, postalCode), // ✅ never "00000" for NG
+            postalCode:   safePostal(destCountry, postalCode),
             countryCode:  destCountry,
           },
           contactInformation: {
@@ -167,7 +165,7 @@ export async function POST(req: NextRequest) {
                   price:       Math.max(Math.round(declaredValueUSD / Math.max(items.length, 1)), 1),
                   quantity:    { value: item.quantity ?? 1, unitOfMeasurement: "PCS" },
                   weight:      { netValue: perItemWeightKg, grossValue: perItemWeightKg },
-                  commodityCodes:      [{ typeCode: "outbound", value: HS_CODE }], // ✅ valid HS code
+                  commodityCodes:      [{ typeCode: "outbound", value: HS_CODE }],
                   exportReasonType:    "permanent",
                   manufacturerCountry: "NG",
                   isTaxesPaid:         false,
@@ -221,7 +219,6 @@ export async function POST(req: NextRequest) {
       const reason = details.length
         ? details.join(" | ")
         : data?.detail ?? data?.title ?? "DHL shipment creation failed";
-      // always expose raw error so you can debug
       return NextResponse.json({ success: false, message: reason, _dhlRaw: data }, { status: 502 });
     }
 
