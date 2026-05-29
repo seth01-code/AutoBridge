@@ -49,9 +49,9 @@ const footerLinks = {
     label: "Marketplace",
     links: [
       { label: "Agro Products", href: "/marketplace",
-      { label: "Packaged Foods", href: "/marketplace},
+      { label: "Packaged Foods", href: "/marketplace"},
       { label: "African Fashion", href: "/marketplace" },
-      { label: "Auto Parts", href: "/marketplace,
+      { label: "Auto Parts", href: "/marketplace",
       { label: "Browse All Products", href: "/marketplace" },
     ],
   },
@@ -68,7 +68,7 @@ const footerLinks = {
   company: {
     label: "Company",
     links: [
-      { label: "About AutoBridge", href: "" },
+      { label: "About AutoBridge", href: "#" },
       { label: "How It Works", href: "#" },
       { label: "Partner With Us", href: "#" },
       { label: "Press & Media", href: "#" },
