@@ -48,10 +48,10 @@ const footerLinks = {
   marketplace: {
     label: "Marketplace",
     links: [
-      { label: "Agro Products", href: "#",}
+      { label: "Agro Products", href: "#"},
       { label: "Packaged Foods", href: "#"},
       { label: "African Fashion", href: "#" },
-      { label: "Auto Parts", href: "#",}
+      { label: "Auto Parts", href: "#"},
       { label: "Browse All Products", href: "/marketplace" },
     ],
   },
