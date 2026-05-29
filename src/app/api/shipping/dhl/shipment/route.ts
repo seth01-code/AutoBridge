@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     shipDate.setDate(shipDate.getDate() + 1);
     while (shipDate.getDay() === 0 || shipDate.getDay() === 6)
       shipDate.setDate(shipDate.getDate() + 1);
-    const plannedDate = shipDate.toISOString().split("T")[0] + "T10:00:00+00:00";
+    const plannedDate = shipDate.toISOString().split("T")[0] + "T10:00:00 GMT+00:00";
 
     const fullDesc = items.map((i: any) => i.description).join(", ") || "Marketplace goods";
     const contentDescription = fullDesc.length > 70 ? fullDesc.slice(0, 67) + "..." : fullDesc;
