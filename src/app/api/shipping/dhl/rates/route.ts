@@ -9,16 +9,19 @@ const DHL_API_URL = USE_PRODUCTION
 
 // ── Startup env validation ───────────────────────────────────────────────────
 console.log("\n🔧 [DHL ROUTE] ENV CHECK ON LOAD:");
-console.log(`   DHL_API_KEY       : ${process.env.DHL_API_KEY       ? process.env.DHL_API_KEY.slice(0, 4) + "…"       : "❌ NOT SET"}`);
-console.log(`   DHL_API_SECRET    : ${process.env.DHL_API_SECRET    ? process.env.DHL_API_SECRET.slice(0, 4) + "…"    : "❌ NOT SET"}`);
-console.log(`   DHL_ACCOUNT_NUMBER: ${process.env.DHL_ACCOUNT_NUMBER || "❌ NOT SET"}`);
-console.log(`   DHL_USE_PRODUCTION: ${process.env.DHL_USE_PRODUCTION ?? "unset (→ TEST mode)"}`);
-console.log(`   Resolved API URL  : ${DHL_API_URL}\n`);
+console.log(`   DHL_API_KEY          : ${process.env.DHL_API_KEY       ? process.env.DHL_API_KEY.slice(0, 4) + "…"       : "❌ NOT SET"}`);
+console.log(`   DHL_API_SECRET       : ${process.env.DHL_API_SECRET    ? process.env.DHL_API_SECRET.slice(0, 4) + "…"    : "❌ NOT SET"}`);
+console.log(`   DHL_EXPORT_ACCOUNT   : ${process.env.DHL_EXPORT_ACCOUNT || "❌ NOT SET"}`);
+console.log(`   DHL_IMPORT_ACCOUNT   : ${process.env.DHL_IMPORT_ACCOUNT || "⚠️  NOT SET (only needed for inbound)"}`);
+console.log(`   DHL_USE_PRODUCTION   : ${process.env.DHL_USE_PRODUCTION ?? "unset (→ TEST mode)"}`);
+console.log(`   Resolved API URL     : ${DHL_API_URL}\n`);
 
-// ── Shipper origin ────────────────────────────────────────────────────────────
+// ── Shipper origin (fixed: Lagos, NG) ────────────────────────────────────────
+// postalCode "00000" is the DHL-accepted code for Nigerian cities (per collection)
 const SHIPPER = {
-  postalCode:   "100001",
-  cityName:     "Lagos",
+  postalCode:   "00000",
+  cityName:     "Ikeja",
+  countyName:   "Lagos",   // ← required by DHL; maps to state/province
   countryCode:  "NG",
   addressLine1: "1 Broad Street",
 };
@@ -35,31 +38,39 @@ const COUNTRY_CODE_MAP: Record<string, string> = {
   "Germany":        "DE",
   "France":         "FR",
   "UAE":            "AE",
+  "Uganda":         "UG",
 };
 
 // ── Representative receiver addresses ────────────────────────────────────────
-const RECEIVER_POSTAL_CODES: Record<string, { postalCode: string; cityName: string; countryCode: string }> = {
-  "NG": { postalCode: "900001", cityName: "Abuja",         countryCode: "NG" },
-  "GB": { postalCode: "EC1A1BB", cityName: "London",       countryCode: "GB" },
-  "US": { postalCode: "10001",   cityName: "New York",     countryCode: "US" },
-  "CA": { postalCode: "M5H2N2",  cityName: "Toronto",      countryCode: "CA" },
-  "DE": { postalCode: "10115",   cityName: "Berlin",       countryCode: "DE" },
-  "FR": { postalCode: "75001",   cityName: "Paris",        countryCode: "FR" },
-  "GH": { postalCode: "00233",   cityName: "Accra",        countryCode: "GH" },
-  "KE": { postalCode: "00100",   cityName: "Nairobi",      countryCode: "KE" },
-  "ZA": { postalCode: "2000",    cityName: "Johannesburg", countryCode: "ZA" },
-  "AE": { postalCode: "00000",   cityName: "Dubai",        countryCode: "AE" },
+// IMPORTANT: DHL uses "00000" for cities that lack postal codes (e.g. most of Africa).
+// For cities that do have postal codes, use the real one — DHL validates them.
+const RECEIVER_ADDRESSES: Record<string, {
+  postalCode: string;
+  cityName:   string;
+  countyName: string;   // state / province / region
+  countryCode: string;
+}> = {
+  "NG": { postalCode: "00000", cityName: "Abuja",         countyName: "FCT",            countryCode: "NG" },
+  "GH": { postalCode: "00000", cityName: "Accra",         countyName: "Accra",          countryCode: "GH" },
+  "KE": { postalCode: "00100", cityName: "Nairobi",       countyName: "Nairobi",        countryCode: "KE" },
+  "ZA": { postalCode: "2000",  cityName: "Johannesburg",  countyName: "Gauteng",        countryCode: "ZA" },
+  "GB": { postalCode: "EC1A1BB", cityName: "London",      countyName: "England",        countryCode: "GB" },
+  "US": { postalCode: "85123", cityName: "Arizona",       countyName: "Arizona",        countryCode: "US" },
+  "CA": { postalCode: "M5H2N2",  cityName: "Toronto",     countyName: "Ontario",        countryCode: "CA" },
+  "DE": { postalCode: "10115",   cityName: "Berlin",      countyName: "Berlin",         countryCode: "DE" },
+  "FR": { postalCode: "75001",   cityName: "Paris",       countyName: "Ile-de-France",  countryCode: "FR" },
+  "AE": { postalCode: "00000",   cityName: "Dubai",       countyName: "Dubai",          countryCode: "AE" },
+  "UG": { postalCode: "40323",   cityName: "Kampala",     countyName: "Kampala",        countryCode: "UG" },
 };
 
-// ── Static fallback rates (used when DHL API is unavailable or 996 in sandbox)
+// ── Static fallback rates (used when DHL API is unavailable) ─────────────────
 const FALLBACK_RATES: Record<string, Array<{ productCode: string; productName: string; price: number }>> = {
   "NG": [
     { productCode: "N", productName: "DHL Express Domestic", price: 4500  },
-    { productCode: "1", productName: "DHL Express Easy",     price: 6500  },
   ],
   "INTL": [
-    { productCode: "P", productName: "DHL Express",          price: 95000 },
-    { productCode: "N", productName: "DHL Economy Select",   price: 65000 },
+    { productCode: "P", productName: "DHL Express Worldwide",  price: 95000 },
+    { productCode: "D", productName: "DHL Express Document",   price: 65000 },
   ],
 };
 
@@ -82,7 +93,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { destinationCountry, totalWeightKg } = body;
+  const { destinationCountry, totalWeightKg, isDocument } = body;
 
   if (!destinationCountry) {
     return NextResponse.json({ success: false, message: "destinationCountry is required" }, { status: 400 });
@@ -92,15 +103,26 @@ export async function POST(req: Request) {
   }
 
   /* ── Resolve codes ──────────────────────────────────────────────────────── */
-  const destCode   = COUNTRY_CODE_MAP[destinationCountry] ?? destinationCountry;
+  const destCode   = COUNTRY_CODE_MAP[destinationCountry] ?? destinationCountry.toUpperCase();
   const isDomestic = destCode === "NG";
 
-  console.log(`\n🌍 [${reqId}] "${destinationCountry}" → "${destCode}" | domestic: ${isDomestic}`);
+  // ── Product code per manual:
+  //   N = same-country (domestic)
+  //   D = cross-border document
+  //   P = cross-border non-document (package)
+  const productCode = isDomestic ? "N" : (isDocument ? "D" : "P");
+
+  // ── Account type per manual:
+  //   EXP account → NG outbound (NG → Country)
+  //   IMP account → NG inbound  (Country → NG)  [domestic also uses EXP]
+  // Since this route is always called from Lagos (shipper=NG), direction is always EXP.
+  const accountNumber = process.env.DHL_EXPORT_ACCOUNT ?? "";
+
+  console.log(`\n🌍 [${reqId}] "${destinationCountry}" → "${destCode}" | domestic: ${isDomestic} | productCode: ${productCode}`);
 
   /* ── Credentials ────────────────────────────────────────────────────────── */
-  const rawKey        = process.env.DHL_API_KEY        ?? "";
-  const rawSecret     = process.env.DHL_API_SECRET     ?? "";
-  const accountNumber = process.env.DHL_ACCOUNT_NUMBER ?? "";
+  const rawKey    = process.env.DHL_API_KEY    ?? "";
+  const rawSecret = process.env.DHL_API_SECRET ?? "";
 
   console.log(`🔑 [${reqId}] key:"${rawKey.slice(0,4)}…" secret:"${rawSecret.slice(0,4)}…" account:"${accountNumber || "NOT SET"}"`);
 
@@ -108,20 +130,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, message: "DHL credentials not configured" }, { status: 500 });
   }
   if (!accountNumber) {
-    console.warn(`⚠️  [${reqId}] DHL_ACCOUNT_NUMBER not set — falling back immediately`);
-    return useFallback(reqId, isDomestic, "DHL_ACCOUNT_NUMBER not configured");
+    console.warn(`⚠️  [${reqId}] DHL_EXPORT_ACCOUNT not set — falling back immediately`);
+    return useFallback(reqId, isDomestic, "DHL_EXPORT_ACCOUNT not configured");
   }
 
   const BASIC_AUTH = Buffer.from(`${rawKey}:${rawSecret}`).toString("base64");
 
   /* ── Build payload ──────────────────────────────────────────────────────── */
-  const weightKg            = Math.max(Number(totalWeightKg) || 0.5, 0.1);
-  const receiver            = RECEIVER_POSTAL_CODES[destCode] ?? { postalCode: "00000", cityName: "Destination", countryCode: destCode };
-  const isCustomsDeclarable = !isDomestic;
+  const weightKg  = Math.max(Number(totalWeightKg) || 0.5, 0.1);
+  const receiver  = RECEIVER_ADDRESSES[destCode] ?? {
+    postalCode:  "00000",
+    cityName:    "Destination",
+    countyName:  "N/A",
+    countryCode: destCode,
+  };
 
-  // ── Date strategy: try today first, then walk forward up to 7 days ────────
-  // The 996 error means "no products for this pickup date" — often a holiday
-  // or weekend. We iterate dates until DHL accepts one or we exhaust retries.
+  // isCustomsDeclarable:
+  //   false → domestic shipments (per manual)
+  //   false → international documents (per collection)
+  //   true  → international non-documents/packages (per manual + collection)
+  const isCustomsDeclarable = !isDomestic && !isDocument;
+
+  // ── Date strategy: walk forward from today, weekdays only ────────────────
+  // nextBusinessDay:true already tells DHL to use the next valid date,
+  // but we still need a valid plannedShippingDateAndTime.
+  // Nigeria is UTC+1; using +01:00 matches the collection exactly.
   const DATES_TO_TRY = buildDateCandidates(USE_PRODUCTION ? 1 : 0, 7);
   console.log(`📅 [${reqId}] Will try ${DATES_TO_TRY.length} date(s): ${DATES_TO_TRY.join(", ")}`);
 
@@ -129,38 +162,48 @@ export async function POST(req: Request) {
     const shippingDate = DATES_TO_TRY[attempt];
     console.log(`\n🗓️  [${reqId}] Attempt ${attempt + 1}/${DATES_TO_TRY.length} — date: ${shippingDate}`);
 
+    // Build the payload exactly matching the DHL collection structure.
+    // Fields marked "fixed" in the collection are hardcoded; "changeable" are dynamic.
     const payload: any = {
-      customerDetails: {
+      plannedShippingDateAndTime: shippingDate,  // changeable
+      productCode,                                // fixed per shipment type
+      unitOfMeasurement: "metric",               // fixed
+      isCustomsDeclarable,                       // fixed per shipment type
+      nextBusinessDay: true,                     // fixed — required in every rates request
+      accounts: [
+        {
+          number:   accountNumber,               // fixed (EXP account for NG-origin)
+          typeCode: "shipper",                   // fixed
+        },
+      ],
+      customerDetails: {                         // changeable
         shipperDetails: {
+          addressLine1: SHIPPER.addressLine1,
           postalCode:   SHIPPER.postalCode,
           cityName:     SHIPPER.cityName,
+          countyName:   SHIPPER.countyName,
           countryCode:  SHIPPER.countryCode,
-          addressLine1: SHIPPER.addressLine1,
         },
         receiverDetails: {
+          addressLine1: "1 Main Street",
           postalCode:   receiver.postalCode,
           cityName:     receiver.cityName,
+          countyName:   receiver.countyName,
           countryCode:  receiver.countryCode,
-          addressLine1: "1 Main St",
         },
       },
-      accounts: [
-        { typeCode: "shipper", number: accountNumber },
-      ],
-      unitOfMeasurement:          "metric",
-      isCustomsDeclarable,
-      plannedShippingDateAndTime: shippingDate,
-      productTypeCode:            "all",
       packages: [
         {
           weight:     weightKg,
-          dimensions: { length: 25, width: 35, height: 15 },
+          dimensions: { length: 30, width: 30, height: 30 },
         },
       ],
-      ...(isCustomsDeclarable && {
-        monetaryAmount: [{ typeCode: "declaredValue", value: 100, currency: "USD" }],
-      }),
     };
+
+    // payerCountryCode is required for international shipments (per collection)
+    if (!isDomestic) {
+      payload.payerCountryCode = "NG";
+    }
 
     console.log(`📤 [${reqId}] Payload:\n`, JSON.stringify(payload, null, 2));
     console.log(`🌐 [${reqId}] POST → ${DHL_API_URL}`);
@@ -200,19 +243,19 @@ export async function POST(req: Request) {
       const reason = String(data?.detail ?? data?.title ?? "DHL API error");
       console.error(`❌ [${reqId}] HTTP ${response.status} — ${reason}`);
 
-      // 996 = no products for this date — try the next date
+      // 996 = no products available for this pickup date — try the next date
       if (reason.includes("996")) {
         console.warn(`🔄 [${reqId}] 996 on date ${shippingDate} — trying next date…`);
-        continue; // retry with next date
+        continue;
       }
 
-      // 998 = bad account number — no point retrying
+      // 998 = account number rejected — no point retrying dates
       if (reason.includes("998")) {
-        console.error(`💡 [${reqId}] 998 = account number rejected. Check DHL_ACCOUNT_NUMBER="${accountNumber}"`);
+        console.error(`💡 [${reqId}] 998 = account number rejected. Check DHL_EXPORT_ACCOUNT="${accountNumber}"`);
         return useFallback(reqId, isDomestic, reason);
       }
 
-      // 401 = bad credentials — no point retrying
+      // 401 = wrong credentials — no point retrying
       if (response.status === 401) {
         console.error(`💡 [${reqId}] 401 = wrong API key/secret`);
         return useFallback(reqId, isDomestic, reason);
@@ -228,7 +271,7 @@ export async function POST(req: Request) {
 
     if (!products.length) {
       console.warn(`⚠️  [${reqId}] Empty products — trying next date…`);
-      continue; // treat empty response same as 996
+      continue;
     }
 
     const rates = products.map((product: any, i: number) => {
@@ -236,16 +279,23 @@ export async function POST(req: Request) {
       const currency = extractCurrency(product);
       const eta      = product.deliveryCapabilities?.estimatedDeliveryDateAndTime ?? null;
       console.log(`   [${i + 1}] ${product.productCode} | ${product.productName} | ₦${price.toLocaleString()} | eta=${eta ?? "N/A"}`);
-      return { productCode: product.productCode, productName: product.productName, price, currency, deliveryTime: eta, isFallback: false };
+      return {
+        productCode:  product.productCode,
+        productName:  product.productName,
+        price,
+        currency,
+        deliveryTime: eta,
+        isFallback:   false,
+      };
     });
 
     console.log(`🏁 [${reqId}] Returning ${rates.length} live rate(s) (date: ${shippingDate})`);
     return NextResponse.json({ success: true, rates, isFallback: false });
   }
 
-  // All date attempts exhausted — use fallback
+  // All date attempts exhausted
   console.warn(`⚠️  [${reqId}] All ${DATES_TO_TRY.length} date attempts failed — using fallback rates`);
-  return useFallback(reqId, isDomestic, "No available pickup dates found in DHL sandbox — using estimated rates");
+  return useFallback(reqId, isDomestic, "No available pickup dates — using estimated rates");
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -253,27 +303,23 @@ export async function POST(req: Request) {
 ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Builds an array of date strings to try, starting from `startOffsetDays`
- * ahead of today and walking forward for `maxDays` business days.
- * In test mode we start from today (offset=0) to maximise sandbox hit chances.
+ * Builds weekday-only date strings in Nigeria local time (UTC+1).
+ * Matches the collection format: "2026-05-26T10:00:00 GMT+01:00"
  */
 function buildDateCandidates(startOffsetDays: number, maxDays: number): string[] {
   const candidates: string[] = [];
   const d = new Date();
-
-  // Apply start offset
   d.setUTCDate(d.getUTCDate() + startOffsetDays);
 
-  let added = 0;
-  let safetyCounter = 0;
+  let added = 0, safetyCounter = 0;
 
   while (added < maxDays && safetyCounter < 30) {
     safetyCounter++;
     const day = d.getUTCDay();
-    // Include weekdays only (Mon–Fri)
-    if (day !== 0 && day !== 6) {
+    if (day !== 0 && day !== 6) { // weekdays only
       const iso = d.toISOString().split("T")[0];
-      candidates.push(`${iso}T10:00:00+00:00`);
+      // Use Nigeria's timezone offset (+01:00) to match the collection exactly
+      candidates.push(`${iso}T10:00:00 GMT+01:00`);
       added++;
     }
     d.setUTCDate(d.getUTCDate() + 1);
