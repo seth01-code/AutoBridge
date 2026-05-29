@@ -12,7 +12,7 @@ const SHIPPER = {
   email:        "dispatch@autobridge.ng",
   addressLine1: "1 Broad Street",
   cityName:     "Lagos",
-  postalCode:   "101001",
+  postalCode:   "101001",   // ✅ valid Lagos GPO
   countryCode:  "NG",
 };
 
@@ -22,15 +22,16 @@ const COUNTRY_TO_ISO: Record<string, string> = {
   Canada: "CA", Germany: "DE", France: "FR", UAE: "AE",
 };
 
-const COUNTRY_POSTAL_FALLBACK: Record<string, string> = {
+// ✅ real postal fallbacks — never send "00000" for NG
+const POSTAL_FALLBACK: Record<string, string> = {
   NG: "101001", GH: "00233", KE: "00100", ZA: "0001",
   GB: "W1A1AA", US: "10001", CA: "M5H2N2",
   DE: "10115",  FR: "75001", AE: "00000",
 };
 
-function fallbackPostal(countryCode: string, provided?: string): string {
+function safePostal(countryCode: string, provided?: string): string {
   if (provided && provided.trim() && provided !== "00000") return provided.trim();
-  return COUNTRY_POSTAL_FALLBACK[countryCode] ?? "00000";
+  return POSTAL_FALLBACK[countryCode] ?? "00000";
 }
 
 export async function POST(req: NextRequest) {
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    console.log(`[${reqId}] Received body:`, JSON.stringify(body));
+    console.log(`[${reqId}] Body:`, JSON.stringify(body));
 
     const {
       orderId,
@@ -48,16 +49,22 @@ export async function POST(req: NextRequest) {
       addressLine1,
       city,
       postalCode,
-      countryCode: rawCountry,
+      countryCode: rawCountry,  // ISO code like "NG" sent by vendor orders page
       totalWeightKg    = 1,
       declaredValueUSD = 50,
       items            = [],
     } = body;
 
     if (!orderId || !recipientName || !city || !rawCountry) {
-      console.error(`[${reqId}] Missing fields:`, { orderId, recipientName, city, rawCountry });
+      const missing = [
+        !orderId        && "orderId",
+        !recipientName  && "recipientName",
+        !city           && "city",
+        !rawCountry     && "countryCode",
+      ].filter(Boolean).join(", ");
+      console.error(`[${reqId}] Missing: ${missing}`);
       return NextResponse.json(
-        { success: false, message: `Missing required fields: ${[!orderId && "orderId", !recipientName && "recipientName", !city && "city", !rawCountry && "countryCode"].filter(Boolean).join(", ")}` },
+        { success: false, message: `Missing required fields: ${missing}` },
         { status: 400 },
       );
     }
@@ -66,7 +73,7 @@ export async function POST(req: NextRequest) {
     const rawSecret     = process.env.DHL_API_SECRET     ?? "";
     const accountNumber = process.env.DHL_ACCOUNT_NUMBER ?? "";
 
-    console.log(`[${reqId}] Credentials: key="${rawKey.slice(0,4)}…" secret="${rawSecret.slice(0,4)}…" account="${accountNumber}"`);
+    console.log(`[${reqId}] key="${rawKey.slice(0,4)}…" account="${accountNumber}"`);
 
     if (!rawKey || !rawSecret || !accountNumber) {
       return NextResponse.json(
@@ -80,7 +87,7 @@ export async function POST(req: NextRequest) {
     const isDomestic  = destCountry === "NG";
     const weightKg    = Math.max(Number(totalWeightKg) || 1, 0.1);
 
-    // Next business day
+    // ✅ next business day, DHL shipment format requires space before GMT
     const shipDate = new Date();
     shipDate.setDate(shipDate.getDate() + 1);
     while (shipDate.getDay() === 0 || shipDate.getDay() === 6)
@@ -96,13 +103,16 @@ export async function POST(req: NextRequest) {
     );
 
     const invoiceDate = new Date().toISOString().split("T")[0];
-    const HS_CODE = "8708.99"; // auto parts — change if needed
+
+    const HS_CODE = "8708.99"; // auto parts — update if you sell other categories
 
     const payload: any = {
       plannedShippingDateAndTime: plannedDate,
       pickup:      { isRequested: false },
       productCode: "P",
-      accounts:    [{ typeCode: "shipper", number: accountNumber }],
+
+      // ✅ shipment endpoint uses "shipper" (rates endpoint uses "account" — they differ)
+      accounts: [{ typeCode: "shipper", number: accountNumber }],
 
       customerDetails: {
         shipperDetails: {
@@ -124,7 +134,7 @@ export async function POST(req: NextRequest) {
           postalAddress: {
             addressLine1: addressLine1 || "1 Main Street",
             cityName:     city,
-            postalCode:   fallbackPostal(destCountry, postalCode),
+            postalCode:   safePostal(destCountry, postalCode), // ✅ never "00000" for NG
             countryCode:  destCountry,
           },
           contactInformation: {
@@ -138,7 +148,9 @@ export async function POST(req: NextRequest) {
       },
 
       content: {
-        packages: [{ weight: weightKg, dimensions: { length: 25, width: 20, height: 15 } }],
+        packages: [
+          { weight: weightKg, dimensions: { length: 25, width: 20, height: 15 } },
+        ],
         isCustomsDeclarable:   !isDomestic,
         declaredValue:         declaredValueUSD,
         declaredValueCurrency: "USD",
@@ -155,7 +167,7 @@ export async function POST(req: NextRequest) {
                   price:       Math.max(Math.round(declaredValueUSD / Math.max(items.length, 1)), 1),
                   quantity:    { value: item.quantity ?? 1, unitOfMeasurement: "PCS" },
                   weight:      { netValue: perItemWeightKg, grossValue: perItemWeightKg },
-                  commodityCodes:      [{ typeCode: "outbound", value: HS_CODE }],
+                  commodityCodes:      [{ typeCode: "outbound", value: HS_CODE }], // ✅ valid HS code
                   exportReasonType:    "permanent",
                   manufacturerCountry: "NG",
                   isTaxesPaid:         false,
@@ -186,7 +198,7 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    console.log(`[${reqId}] Sending to DHL (${USE_PRODUCTION ? "PRODUCTION" : "TEST"}):`, DHL_SHIPMENT_URL);
+    console.log(`[${reqId}] → ${DHL_SHIPMENT_URL}`);
     console.log(`[${reqId}] Payload:`, JSON.stringify(payload, null, 2));
 
     const response = await fetch(DHL_SHIPMENT_URL, {
@@ -202,14 +214,14 @@ export async function POST(req: NextRequest) {
     });
 
     const data = await response.json();
-    console.log(`[${reqId}] DHL response (${response.status}):`, JSON.stringify(data, null, 2));
+    console.log(`[${reqId}] DHL ${response.status}:`, JSON.stringify(data, null, 2));
 
     if (!response.ok) {
       const details: string[] = data?.additionalDetails ?? [];
       const reason = details.length
         ? details.join(" | ")
         : data?.detail ?? data?.title ?? "DHL shipment creation failed";
-      // Always expose raw DHL error to help debug
+      // always expose raw error so you can debug
       return NextResponse.json({ success: false, message: reason, _dhlRaw: data }, { status: 502 });
     }
 
@@ -224,7 +236,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, trackingNumber, labelUrl });
 
   } catch (err: any) {
-    console.error(`[${reqId}] DHL shipment error:`, err);
+    console.error(`[${reqId}] error:`, err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
 }
