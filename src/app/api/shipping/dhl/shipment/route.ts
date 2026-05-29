@@ -1,341 +1,295 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-// ── Toggle between test and production ──────────────────────────────────────
+/* ─────────────────────────────────────────────
+   POST /api/shipping/dhl/shipment
+   Creates a DHL Express shipment via MyDHL API v2.
+   Returns { success, trackingNumber, labelUrl }.
+───────────────────────────────────────────── */
+
 const USE_PRODUCTION = process.env.DHL_USE_PRODUCTION === "true";
 
-const DHL_API_URL = USE_PRODUCTION
-  ? "https://express.api.dhl.com/mydhlapi/rates"
-  : "https://express.api.dhl.com/mydhlapi/test/rates";
+const DHL_SHIPMENT_URL = USE_PRODUCTION
+  ? "https://express.api.dhl.com/mydhlapi/shipments"
+  : "https://express.api.dhl.com/mydhlapi/test/shipments";
 
-// ── Startup env validation ───────────────────────────────────────────────────
-console.log("\n🔧 [DHL ROUTE] ENV CHECK ON LOAD:");
-console.log(`   DHL_API_KEY       : ${process.env.DHL_API_KEY       ? process.env.DHL_API_KEY.slice(0, 4) + "…"       : "❌ NOT SET"}`);
-console.log(`   DHL_API_SECRET    : ${process.env.DHL_API_SECRET    ? process.env.DHL_API_SECRET.slice(0, 4) + "…"    : "❌ NOT SET"}`);
-console.log(`   DHL_ACCOUNT_NUMBER: ${process.env.DHL_ACCOUNT_NUMBER || "❌ NOT SET"}`);
-console.log(`   DHL_USE_PRODUCTION: ${process.env.DHL_USE_PRODUCTION ?? "unset (→ TEST mode)"}`);
-console.log(`   Resolved API URL  : ${DHL_API_URL}\n`);
-
-// ── Shipper origin ────────────────────────────────────────────────────────────
 const SHIPPER = {
-  postalCode:   "101001", // FIX 1: valid Lagos GPO postal code
-  cityName:     "Lagos",
-  countryCode:  "NG",
+  fullName:     "AutoBridge Marketplace",
+  phone:        "+2341234567890",
+  email:        "dispatch@autobridge.ng",
   addressLine1: "1 Broad Street",
+  cityName:     "Lagos",
+  postalCode:   "101001", // FIX 1: real Lagos GPO postal code (was "100001")
+  countryCode:  "NG",
 };
 
-// ── Country name → ISO-3166-1 alpha-2 ────────────────────────────────────────
-const COUNTRY_CODE_MAP: Record<string, string> = {
-  "Nigeria":        "NG",
-  "Ghana":          "GH",
-  "Kenya":          "KE",
+const COUNTRY_TO_ISO: Record<string, string> = {
+  Nigeria:          "NG",
+  Ghana:            "GH",
+  Kenya:            "KE",
   "South Africa":   "ZA",
   "United Kingdom": "GB",
   "United States":  "US",
-  "Canada":         "CA",
-  "Germany":        "DE",
-  "France":         "FR",
-  "UAE":            "AE",
+  Canada:           "CA",
+  Germany:          "DE",
+  France:           "FR",
+  UAE:              "AE",
 };
 
-// ── Representative receiver addresses ────────────────────────────────────────
-// FIX 2: corrected postal codes — "900001" and "00000" are invalid
-const RECEIVER_POSTAL_CODES: Record<string, { postalCode: string; cityName: string; countryCode: string }> = {
-  "NG": { postalCode: "101001",  cityName: "Lagos",        countryCode: "NG" }, // Lagos GPO (not Abuja "900001")
-  "GB": { postalCode: "EC1A1BB", cityName: "London",       countryCode: "GB" },
-  "US": { postalCode: "10001",   cityName: "New York",     countryCode: "US" },
-  "CA": { postalCode: "M5H2N2",  cityName: "Toronto",      countryCode: "CA" },
-  "DE": { postalCode: "10115",   cityName: "Berlin",       countryCode: "DE" },
-  "FR": { postalCode: "75001",   cityName: "Paris",        countryCode: "FR" },
-  "GH": { postalCode: "00233",   cityName: "Accra",        countryCode: "GH" },
-  "KE": { postalCode: "00100",   cityName: "Nairobi",      countryCode: "KE" },
-  "ZA": { postalCode: "2000",    cityName: "Johannesburg", countryCode: "ZA" },
-  "AE": { postalCode: "00000",   cityName: "Dubai",        countryCode: "AE" }, // UAE has no postal system; DHL accepts 00000 here only
+/* ── FIX 2: sensible postal-code fallbacks per country ── */
+const COUNTRY_POSTAL_FALLBACK: Record<string, string> = {
+  NG: "101001", // Lagos GPO
+  GH: "00233",
+  KE: "00100",
+  ZA: "0001",
+  GB: "W1A 1AA",
+  US: "10001",
+  CA: "M5H 2N2",
+  DE: "10115",
+  FR: "75001",
+  AE: "00000",
 };
 
-// ── Static fallback rates (used when DHL API is unavailable) ─────────────────
-const FALLBACK_RATES: Record<string, Array<{ productCode: string; productName: string; price: number }>> = {
-  "NG": [
-    { productCode: "N", productName: "DHL Express Domestic", price: 4500  },
-    { productCode: "1", productName: "DHL Express Easy",     price: 6500  },
-  ],
-  "INTL": [
-    { productCode: "P", productName: "DHL Express",          price: 95000 },
-    { productCode: "N", productName: "DHL Economy Select",   price: 65000 },
-  ],
-};
+function fallbackPostal(countryCode: string, provided?: string): string {
+  if (provided && provided.trim() && provided !== "00000") return provided.trim();
+  return COUNTRY_POSTAL_FALLBACK[countryCode] ?? "00000";
+}
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   MAIN HANDLER
-═══════════════════════════════════════════════════════════════════════════ */
-export async function POST(req: Request) {
-  const reqId = `DHL-${Date.now()}`;
+export async function POST(req: NextRequest) {
+  const reqId = `SHIP-${Date.now()}`;
 
-  console.log("\n" + "█".repeat(60));
-  console.log(`█ [${reqId}] DHL RATES  [${USE_PRODUCTION ? "PRODUCTION" : "TEST"}]`);
-  console.log("█".repeat(60));
-
-  /* ── Parse body ─────────────────────────────────────────────────────────── */
-  let body: any;
   try {
-    body = await req.json();
-    console.log(`📥 [${reqId}] Body:`, JSON.stringify(body));
-  } catch {
-    return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 });
-  }
+    const body = await req.json();
+    const {
+      orderId,
+      recipientName,
+      recipientPhone,
+      recipientEmail,
+      addressLine1,
+      city,
+      postalCode,
+      countryCode: rawCountry,
+      totalWeightKg    = 1,
+      declaredValueUSD = 50,
+      items            = [],
+    } = body;
 
-  const { destinationCountry, totalWeightKg } = body;
+    if (!orderId || !recipientName || !city || !rawCountry) {
+      return NextResponse.json(
+        { success: false, message: "Missing required fields" },
+        { status: 400 },
+      );
+    }
 
-  if (!destinationCountry) {
-    return NextResponse.json({ success: false, message: "destinationCountry is required" }, { status: 400 });
-  }
-  if (totalWeightKg == null) {
-    return NextResponse.json({ success: false, message: "totalWeightKg is required" }, { status: 400 });
-  }
+    const rawKey        = process.env.DHL_API_KEY        ?? "";
+    const rawSecret     = process.env.DHL_API_SECRET     ?? "";
+    const accountNumber = process.env.DHL_ACCOUNT_NUMBER ?? "";
 
-  /* ── Resolve codes ──────────────────────────────────────────────────────── */
-  const destCode   = COUNTRY_CODE_MAP[destinationCountry] ?? destinationCountry;
-  const isDomestic = destCode === "NG";
+    if (!rawKey || !rawSecret || !accountNumber) {
+      return NextResponse.json(
+        { success: false, message: "DHL credentials not configured" },
+        { status: 500 },
+      );
+    }
 
-  console.log(`\n🌍 [${reqId}] "${destinationCountry}" → "${destCode}" | domestic: ${isDomestic}`);
+    const BASIC_AUTH  = Buffer.from(`${rawKey}:${rawSecret}`).toString("base64");
+    const destCountry = COUNTRY_TO_ISO[rawCountry] ?? rawCountry;
+    const isDomestic  = destCountry === "NG";
+    const weightKg    = Math.max(Number(totalWeightKg) || 1, 0.1);
 
-  /* ── Credentials ────────────────────────────────────────────────────────── */
-  const rawKey        = process.env.DHL_API_KEY        ?? "";
-  const rawSecret     = process.env.DHL_API_SECRET     ?? "";
-  const accountNumber = process.env.DHL_ACCOUNT_NUMBER ?? "";
+    /* ── Ship date: next weekday ── */
+    const shipDate = new Date();
+    shipDate.setDate(shipDate.getDate() + 1);
+    while (shipDate.getDay() === 0 || shipDate.getDay() === 6)
+      shipDate.setDate(shipDate.getDate() + 1);
 
-  console.log(`🔑 [${reqId}] key:"${rawKey.slice(0,4)}…" secret:"${rawSecret.slice(0,4)}…" account:"${accountNumber || "NOT SET"}"`);
+    // FIX 3: use +00:00 instead of "GMT+00:00" — strict ISO 8601, no space
+    const plannedDate = shipDate.toISOString().split("T")[0] + "T10:00:00+00:00";
 
-  if (!rawKey || !rawSecret) {
-    return NextResponse.json({ success: false, message: "DHL credentials not configured" }, { status: 500 });
-  }
-  if (!accountNumber) {
-    console.warn(`⚠️  [${reqId}] DHL_ACCOUNT_NUMBER not set — falling back immediately`);
-    return useFallback(reqId, isDomestic, "DHL_ACCOUNT_NUMBER not configured");
-  }
+    /* ── content.description must be ≤ 70 chars ── */
+    const fullDesc = items.map((i: any) => i.description).join(", ") || "Marketplace goods";
+    const contentDescription = fullDesc.length > 70 ? fullDesc.slice(0, 67) + "..." : fullDesc;
 
-  const BASIC_AUTH = Buffer.from(`${rawKey}:${rawSecret}`).toString("base64");
+    /* ── Weight distributed evenly across line items ── */
+    const perItemWeightKg = Math.max(
+      Math.round((weightKg / Math.max(items.length, 1)) * 1000) / 1000,
+      0.1,
+    );
 
-  /* ── Build payload ──────────────────────────────────────────────────────── */
-  const weightKg            = Math.max(Number(totalWeightKg) || 0.5, 0.1);
-  const receiver            = RECEIVER_POSTAL_CODES[destCode] ?? { postalCode: "00000", cityName: "Destination", countryCode: destCode };
-  const isCustomsDeclarable = !isDomestic;
+    /* ── Invoice date ── */
+    const invoiceDate = new Date().toISOString().split("T")[0];
 
-  // ── Date strategy: try today first, then walk forward up to 7 days ────────
-  const DATES_TO_TRY = buildDateCandidates(USE_PRODUCTION ? 1 : 0, 7);
-  console.log(`📅 [${reqId}] Will try ${DATES_TO_TRY.length} date(s): ${DATES_TO_TRY.join(", ")}`);
-
-  for (let attempt = 0; attempt < DATES_TO_TRY.length; attempt++) {
-    const shippingDate = DATES_TO_TRY[attempt];
-    console.log(`\n🗓️  [${reqId}] Attempt ${attempt + 1}/${DATES_TO_TRY.length} — date: ${shippingDate}`);
+    // FIX 4: valid HS commodity code — 8708.99 (auto parts/accessories, other)
+    // Change this to the most appropriate code for your product category
+    const HS_CODE = "8708.99";
 
     const payload: any = {
+      plannedShippingDateAndTime: plannedDate,
+
+      pickup: { isRequested: false },
+
+      productCode: "P",
+
+      // FIX 5: typeCode must be "account", not "shipper"
+      accounts: [{ typeCode: "account", number: accountNumber }],
+
       customerDetails: {
         shipperDetails: {
-          postalCode:   SHIPPER.postalCode,
-          cityName:     SHIPPER.cityName,
-          countryCode:  SHIPPER.countryCode,
-          addressLine1: SHIPPER.addressLine1,
+          postalAddress: {
+            addressLine1: SHIPPER.addressLine1,
+            cityName:     SHIPPER.cityName,
+            postalCode:   SHIPPER.postalCode,
+            countryCode:  SHIPPER.countryCode,
+          },
+          contactInformation: {
+            fullName:    SHIPPER.fullName,
+            phone:       SHIPPER.phone,
+            email:       SHIPPER.email,
+            companyName: SHIPPER.fullName,
+          },
+          typeCode: "business",
         },
+
         receiverDetails: {
-          postalCode:   receiver.postalCode,
-          cityName:     receiver.cityName,
-          countryCode:  receiver.countryCode,
-          addressLine1: "1 Main St",
+          postalAddress: {
+            addressLine1: addressLine1 || "1 Main Street",
+            cityName:     city,
+            // FIX 1 (receiver): use real fallback, never "00000"
+            postalCode:   fallbackPostal(destCountry, postalCode),
+            countryCode:  destCountry,
+          },
+          contactInformation: {
+            fullName:    recipientName,
+            phone:       recipientPhone || "+23400000000",
+            email:       recipientEmail || "",
+            companyName: recipientName,
+          },
+          typeCode: "private",
         },
       },
 
-      // FIX 3: typeCode must be "account" not "shipper" — production rejects "shipper"
-      accounts: [
-        { typeCode: "account", number: accountNumber },
-      ],
+      content: {
+        packages: [
+          {
+            weight:     weightKg,
+            dimensions: { length: 25, width: 20, height: 15 },
+          },
+        ],
 
-      unitOfMeasurement: "metric",
-      isCustomsDeclarable,
+        isCustomsDeclarable:   !isDomestic,
+        declaredValue:         declaredValueUSD,
+        declaredValueCurrency: "USD",
+        description:           contentDescription,
+        incoterm:              "DAP",
+        unitOfMeasurement:     "metric",
 
-      // FIX 4: strict ISO 8601 — no space before +00:00
-      plannedShippingDateAndTime: shippingDate,
+        ...(
+          !isDomestic && {
+            exportDeclaration: {
+              lineItems: items.length
+                ? items.map((item: any, idx: number) => ({
+                    number:      idx + 1,
+                    description: (item.description ?? "Goods").slice(0, 70),
+                    price:       Math.max(
+                      Math.round(declaredValueUSD / Math.max(items.length, 1)),
+                      1,
+                    ),
+                    quantity: {
+                      value:             item.quantity ?? 1,
+                      unitOfMeasurement: "PCS",
+                    },
+                    weight: {
+                      netValue:   perItemWeightKg,
+                      grossValue: perItemWeightKg,
+                    },
+                    // FIX 4: valid HS code (was "9999.99" which DHL rejects)
+                    commodityCodes: [
+                      { typeCode: "outbound", value: HS_CODE },
+                    ],
+                    exportReasonType:    "permanent",
+                    manufacturerCountry: "NG",
+                    isTaxesPaid:         false,
+                  }))
+                : [
+                    {
+                      number:      1,
+                      description: "Marketplace goods",
+                      price:       declaredValueUSD,
+                      quantity:    { value: 1, unitOfMeasurement: "PCS" },
+                      weight:      { netValue: weightKg, grossValue: weightKg },
+                      commodityCodes: [
+                        { typeCode: "outbound", value: HS_CODE },
+                      ],
+                      exportReasonType:    "permanent",
+                      manufacturerCountry: "NG",
+                      isTaxesPaid:         false,
+                    },
+                  ],
+              invoice: {
+                date:   invoiceDate,
+                number: `AB-${reqId}`,
+              },
+            },
+          }
+        ),
+      },
 
-      // FIX 5: "all" is sandbox-only. In production, omit productTypeCode entirely
-      // so DHL returns all products your account is enabled for.
-      // Only add it back if you need to filter to a specific product.
-      ...(USE_PRODUCTION ? {} : { productTypeCode: "all" }),
-
-      packages: [
-        {
-          weight:     weightKg,
-          dimensions: { length: 25, width: 35, height: 15 },
-        },
-      ],
-
-      ...(isCustomsDeclarable && {
-        monetaryAmount: [{ typeCode: "declaredValue", value: 100, currency: "USD" }],
-      }),
+      outputImageProperties: {
+        printerDPI:     300,
+        encodingFormat: "pdf",
+        imageOptions: [
+          { typeCode: "label",      templateName: "ECOM26_84_001",   isRequested: true },
+          { typeCode: "waybillDoc", templateName: "ARCH_8X4_A4_001", isRequested: true },
+        ],
+      },
     };
 
-    console.log(`📤 [${reqId}] Payload:\n`, JSON.stringify(payload, null, 2));
-    console.log(`🌐 [${reqId}] POST → ${DHL_API_URL}`);
+    console.log(`\n[${reqId}] Creating DHL shipment → ${DHL_SHIPMENT_URL}`);
+    console.log(`[${reqId}] Payload:`, JSON.stringify(payload, null, 2));
 
-    /* ── Call DHL ─────────────────────────────────────────────────────────── */
-    let response: Response;
-    try {
-      const t0 = Date.now();
-      response = await fetch(DHL_API_URL, {
-        method:  "POST",
-        headers: {
-          "Content-Type":           "application/json",
-          "Authorization":          `Basic ${BASIC_AUTH}`,
-          "Message-Reference":      `${reqId}-${attempt}`,
-          "Message-Reference-Date": new Date().toUTCString(),
-          "Accept":                 "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-      console.log(`⏱️  [${reqId}] ${Date.now() - t0}ms | HTTP ${response.status}`);
-    } catch (fetchErr: any) {
-      console.error(`💥 [${reqId}] fetch() threw: ${fetchErr.message}`);
-      return useFallback(reqId, isDomestic, "Network error — using estimated rates");
-    }
-
-    /* ── Parse response ───────────────────────────────────────────────────── */
-    let data: any;
-    try {
-      data = await response.json();
-      console.log(`📨 [${reqId}] DHL response (${response.status}):`, JSON.stringify(data, null, 2));
-    } catch {
-      return useFallback(reqId, isDomestic, "DHL returned unreadable response");
-    }
-
-    /* ── Handle errors ────────────────────────────────────────────────────── */
-    if (!response.ok) {
-      const reason = String(data?.detail ?? data?.title ?? "DHL API error");
-      console.error(`❌ [${reqId}] HTTP ${response.status} — ${reason}`);
-
-      // 996 = no products for this date — try the next date
-      if (reason.includes("996")) {
-        console.warn(`🔄 [${reqId}] 996 on date ${shippingDate} — trying next date…`);
-        continue;
-      }
-
-      // 998 = bad account number
-      if (reason.includes("998")) {
-        console.error(`💡 [${reqId}] 998 = account number rejected. Check DHL_ACCOUNT_NUMBER="${accountNumber}"`);
-        return useFallback(reqId, isDomestic, reason);
-      }
-
-      // 401 = bad credentials
-      if (response.status === 401) {
-        console.error(`💡 [${reqId}] 401 = wrong API key/secret`);
-        return useFallback(reqId, isDomestic, reason);
-      }
-
-      return useFallback(reqId, isDomestic, reason);
-    }
-
-    /* ── Map products ─────────────────────────────────────────────────────── */
-    const products: any[] = data.products ?? [];
-    console.log(`✅ [${reqId}] ${products.length} product(s) returned for date ${shippingDate}`);
-
-    if (!products.length) {
-      console.warn(`⚠️  [${reqId}] Empty products — trying next date…`);
-      continue;
-    }
-
-    const rates = products.map((product: any, i: number) => {
-      const price    = extractPrice(product, reqId);
-      const currency = extractCurrency(product);
-      const eta      = product.deliveryCapabilities?.estimatedDeliveryDateAndTime ?? null;
-      console.log(`   [${i + 1}] ${product.productCode} | ${product.productName} | ₦${price.toLocaleString()} | eta=${eta ?? "N/A"}`);
-      return {
-        productCode:  product.productCode,
-        productName:  product.productName,
-        price,
-        currency,
-        deliveryTime: eta,
-        isFallback:   false,
-      };
+    const response = await fetch(DHL_SHIPMENT_URL, {
+      method:  "POST",
+      headers: {
+        "Content-Type":           "application/json",
+        Authorization:            `Basic ${BASIC_AUTH}`,
+        "Message-Reference":      reqId,
+        "Message-Reference-Date": new Date().toUTCString(),
+        Accept:                   "application/json",
+      },
+      body: JSON.stringify(payload),
     });
 
-    console.log(`🏁 [${reqId}] Returning ${rates.length} live rate(s) (date: ${shippingDate})`);
-    return NextResponse.json({ success: true, rates, isFallback: false });
-  }
+    const data = await response.json();
+    console.log(`[${reqId}] DHL response (${response.status}):`, JSON.stringify(data, null, 2));
 
-  // All date attempts exhausted
-  console.warn(`⚠️  [${reqId}] All ${DATES_TO_TRY.length} date attempts failed — using fallback rates`);
-  return useFallback(reqId, isDomestic, "No available pickup dates found — using estimated rates");
-}
+    if (!response.ok) {
+      const details: string[] = data?.additionalDetails ?? [];
+      const reason = details.length
+        ? details.join(" | ")
+        : data?.detail ?? data?.title ?? "DHL shipment creation failed";
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   HELPERS
-═══════════════════════════════════════════════════════════════════════════ */
-
-function buildDateCandidates(startOffsetDays: number, maxDays: number): string[] {
-  const candidates: string[] = [];
-  const d = new Date();
-
-  d.setUTCDate(d.getUTCDate() + startOffsetDays);
-
-  let added = 0;
-  let safetyCounter = 0;
-
-  while (added < maxDays && safetyCounter < 30) {
-    safetyCounter++;
-    const day = d.getUTCDay();
-    if (day !== 0 && day !== 6) {
-      const iso = d.toISOString().split("T")[0];
-      // FIX 4: strict ISO 8601, no "GMT+00:00" format
-      candidates.push(`${iso}T10:00:00+00:00`);
-      added++;
+      // Surface full DHL error in non-production for easier debugging
+      const extra = USE_PRODUCTION ? {} : { _dhlRaw: data };
+      return NextResponse.json({ success: false, message: reason, ...extra }, { status: 502 });
     }
-    d.setUTCDate(d.getUTCDate() + 1);
+
+    /* ── Extract tracking number ── */
+    const trackingNumber: string =
+      data.shipmentTrackingNumber ??
+      data.packages?.[0]?.trackingNumber ??
+      "";
+
+    /* ── Extract shipping label (base64 PDF) ── */
+    const labelDoc  = (data.documents ?? []).find((d: any) => d.typeCode === "label");
+    const labelBase64: string = labelDoc?.content ?? "";
+    const labelUrl  = labelBase64 ? `data:application/pdf;base64,${labelBase64}` : "";
+
+    return NextResponse.json({ success: true, trackingNumber, labelUrl });
+
+  } catch (err: any) {
+    console.error(`[${reqId}] DHL shipment error:`, err);
+    return NextResponse.json(
+      { success: false, message: err.message },
+      { status: 500 },
+    );
   }
-
-  return candidates;
-}
-
-function useFallback(reqId: string, isDomestic: boolean, reason: string) {
-  const key      = isDomestic ? "NG" : "INTL";
-  const fallback = FALLBACK_RATES[key];
-
-  console.warn(`⚠️  [${reqId}] FALLBACK triggered (${key}): ${reason}`);
-
-  if (!fallback?.length) {
-    return NextResponse.json({ success: false, message: reason }, { status: 503 });
-  }
-
-  const rates = fallback.map((r) => ({
-    productCode:  r.productCode,
-    productName:  r.productName,
-    price:        r.price,
-    currency:     "NGN",
-    deliveryTime: null,
-    isFallback:   true,
-  }));
-
-  console.warn(`⚠️  [${reqId}] Returning ${rates.length} fallback rate(s)`);
-  return NextResponse.json({ success: true, rates, isFallback: true });
-}
-
-function extractPrice(product: any, reqId: string): number {
-  const totalPrice: any[] = product.totalPrice ?? [];
-  const priceObj =
-    totalPrice.find((p: any) => p.priceCurrency === "NGN") ??
-    totalPrice.find((p: any) => p.priceCurrency === "USD") ??
-    totalPrice[0];
-
-  if (!priceObj) {
-    console.warn(`   ⚠️  [${reqId}] No price for "${product.productCode}"`);
-    return 0;
-  }
-
-  if (priceObj.priceCurrency !== "NGN") {
-    const converted = Math.round(priceObj.price * 1600);
-    console.log(`   💱 [${reqId}] ${priceObj.priceCurrency} ${priceObj.price} → ₦${converted.toLocaleString()} (×1600)`);
-    return converted;
-  }
-
-  return Math.round(priceObj.price);
-}
-
-function extractCurrency(product: any): string {
-  return product.totalPrice?.[0]?.priceCurrency ?? "NGN";
 }
