@@ -1,41 +1,13 @@
 {
   "name": "AutoBridge Commerce",
   "short_name": "AutoBridge",
-  "description": "Africa's integrated commerce and logistics platform",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#0B1120",
-  "theme_color": "#F97316",
-  "orientation": "portrait-primary",
-  "categories": ["shopping", "lifestyle"],
-  "lang": "en-NG",
   "icons": [
-    {
-      "src": "/android-chrome-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/android-chrome-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    }
+    { "src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/android-chrome-512x512.png",  "sizes": "512x512",  "type": "image/png" }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshots/marketplace.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "AutoBridge Marketplace"
-    }
-  ]
+  "theme_color": "#FF6B35",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/"
 }
