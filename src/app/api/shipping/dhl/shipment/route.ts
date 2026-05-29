@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
       plannedShippingDateAndTime: plannedDate,
       pickup:      { isRequested: false },
       productCode: "P",
-      accounts:    [{ typeCode: "account", number: accountNumber }],
+      accounts:    [{ typeCode: "shipper", number: accountNumber }],
 
       customerDetails: {
         shipperDetails: {
